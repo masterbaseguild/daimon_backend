@@ -1,6 +1,6 @@
 FROM node:21-alpine3.17
 
-WORKDIR /
+WORKDIR /daimon
 
 COPY . .
 RUN npm install
