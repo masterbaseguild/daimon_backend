@@ -49,7 +49,7 @@ const database = mariadb.createPool({
 database.getConnection()
 
 const s3 = new S3Client({
-    region: 'eu-south-1'
+    region: process.env.S3_REGION
 });
 
 const generateId = (table: string) => {
@@ -301,9 +301,9 @@ passport.use(new localStrategy(async (username: string, password: string, done: 
 }));
 
 const app = express();
-app.use(cors({origin:['http://localhost:4000','http://87.1.14.144:4000'], credentials: true}));
+app.use(cors({origin:['http://localhost:4000','https://projectdaimon.com'], credentials: true}));
 app.use(session({
-    secret: 'daimon',
+    secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: true
 }));
