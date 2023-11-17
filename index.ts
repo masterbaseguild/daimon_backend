@@ -1057,7 +1057,7 @@ ws.on('connection', (socket: WebSocket) => {
     });
 });
 
-server.listen(3000,()=>console.log(`Server Start Successful.`));
+server.listen(process.env.PORT,()=>console.log(`Server Start Successful.`));
 
 function capitalizeFirstLetter(string: String) {
     return string.charAt(0).toUpperCase() + string.slice(1);
