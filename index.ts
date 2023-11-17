@@ -303,7 +303,7 @@ passport.use(new localStrategy(async (username: string, password: string, done: 
 const app = express();
 app.use(cors({origin:['http://localhost:4000','https://projectdaimon.com'], credentials: true}));
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
     saveUninitialized: true
 }));
