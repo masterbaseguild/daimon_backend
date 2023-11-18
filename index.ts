@@ -240,7 +240,10 @@ const s3Query = (path: string) => {
             Key: path
         }))
             .then((data: any) => {
-                resolve(data.Body);
+                data.Body.transformToString()
+                    .then((body: any) => {
+                        resolve(body);
+                    });
             })
             .catch((err: any) => {
                 console.log(err);
