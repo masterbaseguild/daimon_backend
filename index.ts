@@ -242,6 +242,7 @@ const s3Query = (path: string) => {
             .then((data: any) => {
                 data.Body.transformToString()
                     .then((body: any) => {
+                        console.log(body);
                         resolve(body);
                     });
             })
