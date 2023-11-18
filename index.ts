@@ -12,7 +12,7 @@ import crypto from 'crypto';
 import WebSocket from 'ws';
 import http from 'http';
 import mariadb from 'mariadb';
-import S3, { S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import 'dotenv/config';
 
 const spawnpoint = '000000000000'
@@ -235,7 +235,7 @@ const dbQueryOne = (sql: string, params: string[]) => {
 
 const s3Query = (path: string) => {
     return new Promise((resolve) => {
-        s3.send(new S3.GetObjectCommand({
+        s3.send(new GetObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: path
         }))
@@ -265,7 +265,7 @@ const s3Query = (path: string) => {
 
 const s3Create = (path: string, body: any) => {
     return new Promise<boolean>((resolve) => {
-        s3.send(new S3.PutObjectCommand({
+        s3.send(new PutObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: path,
             Body: body
