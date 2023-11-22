@@ -305,7 +305,7 @@ passport.use(new localStrategy(async (username: string, password: string, done: 
 }));
 
 const app = express();
-app.use(cors({origin:['https://api.projectdaimon.com'], credentials: true}));
+app.use(cors({origin:['https://projectdaimon.com','http://localhost:4000'], credentials: true}));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
