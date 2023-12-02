@@ -305,7 +305,7 @@ passport.use(new localStrategy(async (username: string, password: string, done: 
 }));
 
 const app = express();
-app.use(cors({origin:['https://api.projectdaimon.com'], credentials: true}));
+app.use(cors({origin:['https://api.projectdaimon.com',"http://localhost:4000"], credentials: true}));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
@@ -653,6 +653,19 @@ app.get('/user/:id', (req: express.Request, res: express.Response) => {
             }
         });
 });
+
+app.get('/players', (req: express.Request, res: express.Response) => {
+    dbQuery('SELECT * FROM asc_players', [])
+        .then((rows: any) => {
+            if(rows) {
+                res.json(rows);
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        });
+}
+);
 
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
