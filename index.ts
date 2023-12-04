@@ -46,7 +46,6 @@ const database = mariadb.createPool({
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME
 });
-database.getConnection()
 
 const s3 = new S3Client({
     region: process.env.S3_REGION
@@ -666,6 +665,18 @@ app.get('/players', (req: express.Request, res: express.Response) => {
         });
 }
 );
+
+app.get('/teams', (req: express.Request, res: express.Response) => {
+    dbQuery('SELECT * FROM asc_teams', [])
+        .then((rows: any) => {
+            if(rows) {
+                res.json(rows);
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        });
+});
 
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
