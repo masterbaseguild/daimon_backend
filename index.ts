@@ -1,7 +1,64 @@
-import express from 'express';
 //import sqlite3 from 'sqlite3';
-import cors from 'cors';
 //import fs from 'fs';
+
+//const localDb = new sqlite3.Database('../database/daimon.db');
+
+/* const localDbQuery = (sql: string, params: string[]) => {
+    return new Promise((resolve) => {
+        localDb.all(sql, params, (err, rows) => {
+            if (err) {
+                console.log(err);
+                resolve(null);
+            } else {
+                resolve(rows);
+            }
+        });
+    });
+}; */
+
+/* const localDbQueryOne = (sql: string, params: string[]) => {
+    return new Promise((resolve) => {
+        localDb.get(sql, params, (err, row) => {
+            if (err) {
+                console.log(err);
+                resolve(null);
+            } else {
+                resolve(row);
+            }
+        });
+    });
+}; */
+
+/* const localS3Query = (path: string) => {
+    const root = '../localDb/bucket/';
+    return new Promise((resolve) => {
+        fs.readFile(root+path, (err, data) => {
+            if (err) {
+                console.log(err);
+                resolve(null);
+            } else {
+                resolve(data);
+            }
+        }
+    )});
+}; */
+
+/* const localS3Create = (path: string, body: any) => {
+    const root = '../localDb/bucket/';
+    return new Promise<boolean>((resolve) => {
+        fs.writeFile(root+path, body, (err) => {
+            if (err) {
+                console.log(err);
+                resolve(false);
+            } else {
+                resolve(true);
+            }
+        })
+    });
+}; */
+
+import express from 'express';
+import cors from 'cors';
 import passport from 'passport';
 import { Strategy as localStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
@@ -38,18 +95,6 @@ declare global {
         hairStyle: string;
     }
 }
-
-//const localDb = new sqlite3.Database('../database/daimon.db');
-const database = mariadb.createPool({
-    host: process.env.DATABASE_ENDPOINT,
-    user: process.env.DATABASE_USER,
-    password: process.env.DATABASE_PASSWORD,
-    database: process.env.DATABASE_NAME
-});
-
-const s3 = new S3Client({
-    region: process.env.S3_REGION
-});
 
 const generateId = (table: string) => {
     return new Promise<string>((resolve) => {
@@ -156,18 +201,16 @@ const getCharacterOwner = (character: string) => {
     });
 }
 
-/* const localDbQuery = (sql: string, params: string[]) => {
-    return new Promise((resolve) => {
-        localDb.all(sql, params, (err, rows) => {
-            if (err) {
-                console.log(err);
-                resolve(null);
-            } else {
-                resolve(rows);
-            }
-        });
-    });
-}; */
+const database = mariadb.createPool({
+    host: process.env.DATABASE_ENDPOINT,
+    user: process.env.DATABASE_USER,
+    password: process.env.DATABASE_PASSWORD,
+    database: process.env.DATABASE_NAME
+});
+
+const s3 = new S3Client({
+    region: process.env.S3_REGION
+});
 
 const dbQuery = (sql: string, params: string[]) => {
     return new Promise((resolve) => {
@@ -187,19 +230,6 @@ const dbQuery = (sql: string, params: string[]) => {
     });
 }
 
-/* const localDbQueryOne = (sql: string, params: string[]) => {
-    return new Promise((resolve) => {
-        localDb.get(sql, params, (err, row) => {
-            if (err) {
-                console.log(err);
-                resolve(null);
-            } else {
-                resolve(row);
-            }
-        });
-    });
-}; */
-
 const dbQueryOne = (sql: string, params: string[]) => {
     return new Promise((resolve) => {
         database.query(sql, params)
@@ -217,20 +247,6 @@ const dbQueryOne = (sql: string, params: string[]) => {
             });
     });
 }
-
-/* const localS3Query = (path: string) => {
-    const root = '../localDb/bucket/';
-    return new Promise((resolve) => {
-        fs.readFile(root+path, (err, data) => {
-            if (err) {
-                console.log(err);
-                resolve(null);
-            } else {
-                resolve(data);
-            }
-        }
-    )});
-}; */
 
 const s3Query = (path: string) => {
     return new Promise((resolve) => {
@@ -251,20 +267,6 @@ const s3Query = (path: string) => {
             });
     })
 };
-
-/* const localS3Create = (path: string, body: any) => {
-    const root = '../localDb/bucket/';
-    return new Promise<boolean>((resolve) => {
-        fs.writeFile(root+path, body, (err) => {
-            if (err) {
-                console.log(err);
-                resolve(false);
-            } else {
-                resolve(true);
-            }
-        })
-    });
-}; */
 
 const s3Create = (path: string, body: any) => {
     return new Promise<boolean>((resolve) => {
