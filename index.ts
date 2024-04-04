@@ -69,7 +69,7 @@ import crypto from 'crypto';
 import WebSocket from 'ws';
 import http from 'http';
 import mariadb from 'mariadb';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, ListObjectsCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import 'dotenv/config';
 
 const spawnpoint = '000000000000'
@@ -285,6 +285,22 @@ const s3Create = (path: string, body: any) => {
     })
 }
 
+const s3ListFolders = (path: string) => {
+    return new Promise((resolve) => {
+        s3.send(new ListObjectsCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Prefix: path
+        }))
+            .then((data: any) => {
+                resolve(data);
+            })
+            .catch((err: any) => {
+                console.log(err);
+                resolve(null);
+            });
+    });
+}
+
 passport.serializeUser((user: Express.User, done: Function) => done(null, user.id));
 passport.deserializeUser(async (id: string, done: Function) => {
     const user: any = await dbQueryOne('SELECT * FROM users WHERE id = ?', [id]);
@@ -325,6 +341,78 @@ const ws = new WebSocket.Server({ server });
 app.get('/', (req: express.Request, res: express.Response) => {
     console.log('ping!');
     res.send('daimon api');
+});
+
+app.get('/canon/cast/*', (req: express.Request, res: express.Response) => {
+    const folderName = "articles/cast/"+req.params[0];
+    const fileName = "articles/cast/"+req.params[0]+req.params[0].substring(req.params[0].lastIndexOf("/"))+".md";
+    s3ListFolders(folderName)
+        .then((data: any) => {
+            if(data.Contents.length>1) {
+                const children = data.Contents.map((file: any) => file.Key).filter((child: string) => child!==fileName).map((child: string) => child.substring(child.indexOf("/")+1));
+                if(data.Contents.map((file: any) => file.Key).includes(fileName)) {
+                    s3Query(fileName)
+                        .then((data: any) => {
+                            if(data) {
+                                res.json({body: data, children: children});
+                            }
+                            else {
+                                res.status(404).json('notfound');
+                            }
+                        });
+                }
+                else {
+                    res.json({children: children});
+                }
+            }
+            else {
+                s3Query(folderName+".md")
+                    .then((data: any) => {
+                        if(data) {
+                            res.json({body: data});
+                        }
+                        else {
+                            res.status(404).json('notfound');
+                        }
+                    });
+            }
+        });
+});
+
+app.get('/canon/map/*', (req: express.Request, res: express.Response) => {
+    s3Query(`articles/map/${req.params[0]}.md`)
+        .then((data: any) => {
+            if(data) {
+                res.json(data);
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        });
+});
+
+app.get('/canon/glossary/*', (req: express.Request, res: express.Response) => {
+    s3Query(`articles/glossary/${req.params[0]}.md`)
+        .then((data: any) => {
+            if(data) {
+                res.json(data);
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        });
+});
+
+app.get('/canon/timeline/*', (req: express.Request, res: express.Response) => {
+    s3Query(`articles/timeline/${req.params[0]}.md`)
+        .then((data: any) => {
+            if(data) {
+                res.json(data);
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        });
 });
 
 app.get('/event', (req: express.Request, res: express.Response) => {
