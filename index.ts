@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import passport from 'passport';
 import { Strategy as localStrategy } from 'passport-local';
+import { Strategy as discordStrategy } from 'passport-discord';
 import bcrypt from 'bcryptjs';
 import session from 'express-session';
 import bodyParser from 'body-parser';
@@ -15,8 +16,7 @@ import 'dotenv/config';
 declare global {
     namespace Express {
         interface User {
-            username: string;
-            password: string;
+            id: string;
         }
     }
     interface Body {
@@ -145,30 +145,108 @@ const s3Create = (path: string, body: any) => {
 
 // passport
 
-passport.serializeUser((user: Express.User, done: Function) => done(null, user.username));
-passport.deserializeUser(async (username: string, done: Function) => {
-    const user: any = await dbQueryOne('SELECT * FROM local_users WHERE username = ?', [username]);
+passport.serializeUser((user: Express.User, done: Function) => done(null, user.id));
+passport.deserializeUser(async (id: string, done: Function) => {
+    const user: any = await dbQueryOne('SELECT * FROM players WHERE id = ?', [id]);
     done(null, user);
 });
-passport.use(new localStrategy(async (username: string, password: string, done: Function) => {
+
+// the same strategy handles register, login and link
+
+passport.use("local", new localStrategy({passReqToCallback: true}, async (req: Express.Request, username: string, password: string, done: Function) => {
     const user: any = await dbQueryOne('SELECT * FROM local_users WHERE username = ?', [username]);
-    if (!user) return done(null, false);
-    if (!user.local) return done(null, false);
-    else bcrypt.compare(password, user.local, (error: Error, result: boolean) => {
-        if (error) throw error;
-        if (result === true)
-        {
-            delete user.local;
-            return done(null, user);
+    // login
+    if(user) {
+        // success
+        if(bcrypt.compareSync(password, user.password)) {
+            done(null, {id: user.player});
         }
-        else return done(null, false);
-    });
+        // fail
+        else {
+            done(null, false);
+        }
+    }
+    // register
+    else {
+        const hash = bcrypt.hashSync(password, 10);
+        var playerId: string;
+        // link
+        if (req.user) {
+            playerId = req.user.id;
+        }
+        // register
+        else {
+            playerId = await generateId('players');
+            dbQuery('INSERT INTO players (id) VALUES (?)', [playerId]);
+        }
+        dbQuery('INSERT INTO local_users (username, password, player) VALUES (?, ?, ?)', [username, hash, playerId]);
+        done(null, {id: playerId});
+    }
+}));
+
+passport.use("discord", new discordStrategy({
+    clientID: process.env.DISCORD_CLIENT_ID || '',
+    clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+    callbackURL: process.env.DISCORD_CALLBACK_URL || '',
+    scope: ['identify'],
+    passReqToCallback: true
+}, async (req: Express.Request, profile: any, done: Function) => {
+    const user: any = await dbQueryOne('SELECT * FROM discord_users WHERE discord_id = ?', [profile.id]);
+    // initialize
+    if(!user) {
+        await dbQuery('INSERT INTO discord_users (discord_id) VALUES (?)', [profile.id]);
+    }
+    // login
+    else if (user.player) {
+        return done(null, {id: user.player});
+    }
+    var playerId;
+    // link
+    if (req.user) {
+        playerId = req.user.id;
+    }
+    // create and link
+    else {
+        playerId = await generateId('players');
+        dbQuery('INSERT INTO players (id) VALUES (?)', [playerId]);
+    }
+    dbQuery('UPDATE discord_users SET player = ? WHERE discord_id = ?', [playerId, profile.id]);
+    done(null, {id: playerId});
+}));
+
+passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (req: Express.Request, username: string, password: string, done: Function) => {
+    const minecraftPlayer: any = await dbQueryOne('SELECT * FROM minecraft.ls_players WHERE last_name = ?', [username]);
+    // fail
+    if(!minecraftPlayer||!bcrypt.compareSync(password, minecraftPlayer.password)) {
+        done(null, false);
+    }
+    const user: any = await dbQueryOne('SELECT * FROM minecraft_players WHERE ls_id = ?', [minecraftPlayer.id]);
+    // initialize
+    if(!user) {
+        await dbQuery('INSERT INTO minecraft_players (ls_id) VALUES (?)', [minecraftPlayer.id]);
+    }
+    // login
+    else if (user.player) {
+        return done(null, {id: user.player});
+    }
+    var playerId;
+    // link
+    if (req.user) {
+        playerId = req.user.id;
+    }
+    // create and link
+    else {
+        playerId = await generateId('players');
+        dbQuery('INSERT INTO players (id) VALUES (?)', [playerId]);
+    }
+    dbQuery('UPDATE minecraft_players SET player = ? WHERE ls_id = ?', [playerId, minecraftPlayer.id]);
+    done(null, {id: playerId});
 }));
 
 // middleware
 
 const app = express();
-app.use(cors({origin:['https://projectdaimon.com','http://localhost:4000','https://leagues.masterbaseguild.it'], credentials: true}));
+app.use(cors({origin:['https://projectdaimon.com','http://localhost:4000','https://masterbaseguild.it'], credentials: true}));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
@@ -304,32 +382,20 @@ app.get('/guild/:id/minecraft', (req: express.Request, res: express.Response) =>
 
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
-app.post('/register/local', (req: express.Request, res: express.Response) => {
-    const username = req.body.username;
-    const password = req.body.password;
-    dbQueryOne('SELECT * FROM local_users WHERE username = ?', [username])
-        .then((row: any) => {
-            if(row) {
-                res.status(409).json('conflict');
-            }
-            else {
-                bcrypt.hash(password, 10, (error: Error, hash: string) => {
-                    if (error) throw error;
-                    dbQuery('INSERT INTO local_users (username, local) VALUES (?, ?, ?)', [username, hash])
-                        .then(() => {
-                            res.status(201).json('created');
-                        });
-                });
-            }
-    });
-});
-
 app.post('/login/local', passport.authenticate('local'), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
 });
 
+app.post('/login/minecraft', passport.authenticate('minecraft'), (req: express.Request, res: express.Response) => {
+    res.status(200).json('success');
+});
+
+app.post('/login/discord', passport.authenticate('discord'), (req: express.Request, res: express.Response) => {
+    res.status(200).json('success');
+});
+
 app.post('/logout', (req: express.Request, res: express.Response) => {
-    if(req.isAuthenticated()) {
+    if(req.user) {
         req.logout(() => {
             res.status(200).json('success');
         });
@@ -339,37 +405,8 @@ app.post('/logout', (req: express.Request, res: express.Response) => {
     }
 });
 
-app.post('/unregister/local', (req: express.Request, res: express.Response) => {
-    if(req.isAuthenticated()) {
-        const username = req.body.username;
-        const password = req.body.password;
-        dbQueryOne('SELECT * FROM local_users WHERE username = ?', [username])
-            .then((row: any) => {
-                if(row) {
-                    bcrypt.compare(password, row.local, (error: Error, result: boolean) => {
-                        if (error) throw error;
-                        if (result === true)
-                        {
-                            dbQuery('DELETE FROM local_users WHERE username = ?', [username])
-                                .then(() => {
-                                    res.status(200).json('success');
-                                });
-                        }
-                        else res.status(401).json('unauthorized');
-                    });
-                }
-                else {
-                    res.status(404).json('notfound');
-                }
-            });
-    }
-    else {
-        res.status(401).json('unauthorized');
-    }
-});
-
 app.post('/message', (req: express.Request, res: express.Response) => {
-    if(req.isAuthenticated()) {
+    if(req.user) {
         const type = req.body.type;
         const guild = req.body.guild;
         const user = req.body.user;
@@ -384,7 +421,7 @@ app.post('/message', (req: express.Request, res: express.Response) => {
 });
 
 app.post('/guild', (req: express.Request, res: express.Response) => {
-    if(req.isAuthenticated()) {
+    if(req.user) {
         generateId('guilds').then((id: string) => {
             const display = req.body.display;
             const player = req.body.player;
