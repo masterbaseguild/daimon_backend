@@ -187,7 +187,7 @@ passport.use("local", new localStrategy({passReqToCallback: true}, async (req: E
 passport.use("discord", new discordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID || '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
-    callbackURL: process.env.DISCORD_CALLBACK_URL || '',
+    callbackURL: "http://localhost:3000/login",
     scope: ['identify'],
     passReqToCallback: true
 }, async (req: Express.Request, profile: any, done: Function) => {
@@ -215,15 +215,15 @@ passport.use("discord", new discordStrategy({
 }));
 
 passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (req: Express.Request, username: string, password: string, done: Function) => {
-    const minecraftPlayer: any = await dbQueryOne('SELECT * FROM minecraft.ls_players WHERE last_name = ?', [username]);
+    const minecraftPlayer: any = await dbQueryOne('SELECT * FROM minecraft.authme WHERE realname = ?', [username]);
     // fail
     if(!minecraftPlayer||!bcrypt.compareSync(password, minecraftPlayer.password)) {
         done(null, false);
     }
-    const user: any = await dbQueryOne('SELECT * FROM minecraft_players WHERE ls_id = ?', [minecraftPlayer.id]);
+    const user: any = await dbQueryOne('SELECT * FROM minecraft_players WHERE authme_id = ?', [minecraftPlayer.id]);
     // initialize
     if(!user) {
-        await dbQuery('INSERT INTO minecraft_players (ls_id) VALUES (?)', [minecraftPlayer.id]);
+        await dbQuery('INSERT INTO minecraft_players (authme_id) VALUES (?)', [minecraftPlayer.id]);
     }
     // login
     else if (user.player) {
@@ -239,7 +239,7 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
         playerId = await generateId('players');
         dbQuery('INSERT INTO players (id) VALUES (?)', [playerId]);
     }
-    dbQuery('UPDATE minecraft_players SET player = ? WHERE ls_id = ?', [playerId, minecraftPlayer.id]);
+    dbQuery('UPDATE minecraft_players SET player = ? WHERE authme_id = ?', [playerId, minecraftPlayer.id]);
     done(null, {id: playerId});
 }));
 
@@ -382,15 +382,7 @@ app.get('/guild/:id/minecraft', (req: express.Request, res: express.Response) =>
 
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
-app.post('/login/local', passport.authenticate('local'), (req: express.Request, res: express.Response) => {
-    res.status(200).json('success');
-});
-
-app.post('/login/minecraft', passport.authenticate('minecraft'), (req: express.Request, res: express.Response) => {
-    res.status(200).json('success');
-});
-
-app.post('/login/discord', passport.authenticate('discord'), (req: express.Request, res: express.Response) => {
+app.post('/login', passport.authenticate(["local","minecraft","discord"], {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
 });
 
