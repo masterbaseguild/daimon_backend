@@ -187,7 +187,7 @@ passport.use("local", new localStrategy({passReqToCallback: true}, async (req: E
 passport.use("discord", new discordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID || '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
-    callbackURL: "http://localhost:3000/login",
+    callbackURL: "http://localhost:3000/login/discord",
     scope: ['identify'],
     passReqToCallback: true
 }, async (req: Express.Request, profile: any, done: Function) => {
@@ -380,9 +380,31 @@ app.get('/guild/:id/minecraft', (req: express.Request, res: express.Response) =>
         });
 });
 
+app.get('/leaderboards', async (req: express.Request, res: express.Response) => {
+    const players = await dbQuery('SELECT * FROM players', [])
+    const guilds = await dbQuery('SELECT * FROM guilds', [])
+    const minecraft = await dbQuery('SELECT mp.*, a.realname FROM minecraft_players mp RIGHT JOIN minecraft.authme a ON mp.authme_id = a.id', [])
+    const minecraftFactions = await dbQuery('SELECT mf.*, f.name FROM minecraft_factions mf RIGHT JOIN minecraft.mf_faction f ON mf.mf_id = f.id', [])
+    var discord: any = await dbQuery('SELECT * FROM discord_users', [])
+    discord = JSON.parse(JSON.stringify(discord, (key, value) =>
+        typeof value === 'bigint'
+            ? value.toString()
+            : value // return everything else unchanged
+    ));
+    res.json({players, guilds, minecraft, minecraftFactions, discord});
+});
+
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
-app.post('/login', passport.authenticate(["local","minecraft","discord"], {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
+app.post('/login/local', passport.authenticate("local", {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
+    res.status(200).json('success');
+});
+
+app.post('/login/minecraft', passport.authenticate("minecraft", {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
+    res.status(200).json('success');
+});
+
+app.post('/login/discord', passport.authenticate("discord", {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
 });
 
