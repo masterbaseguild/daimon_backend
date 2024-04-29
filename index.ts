@@ -272,6 +272,22 @@ app.get('/user', (req: express.Request, res: express.Response) => {
     res.json(req.user);
 });
 
+app.get('/user/auths', async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const local = await dbQueryOne('SELECT * FROM local_users WHERE player = ?', [req.user.id]);
+        var discord = await dbQueryOne('SELECT * FROM discord_users WHERE player = ?', [req.user.id]);
+        if(discord) {
+            discord = JSON.parse(JSON.stringify(discord, (key, value) =>
+                typeof value === 'bigint'
+                    ? value.toString()
+                    : value // return everything else unchanged
+            ));
+        }
+        const minecraft = await dbQueryOne('SELECT * FROM minecraft_players WHERE player = ?', [req.user.id]);
+        res.json({local, discord, minecraft});
+    }
+});
+
 app.get('/player/:id', (req: express.Request, res: express.Response) => {
     dbQueryOne('SELECT * FROM players WHERE id = ?', [req.params.id])
         .then((row: any) => {
