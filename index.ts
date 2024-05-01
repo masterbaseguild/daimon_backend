@@ -153,10 +153,10 @@ passport.deserializeUser(async (id: string, done: Function) => {
 
 // the same strategy handles register, login and link
 
-passport.use("local", new localStrategy({passReqToCallback: true}, async (req: Express.Request, username: string, password: string, done: Function) => {
+passport.use("local", new localStrategy({passReqToCallback: true}, async (req: any, username: string, password: string, done: Function) => {
     const user: any = await dbQueryOne('SELECT * FROM local_users WHERE username = ?', [username]);
     // login
-    if(user) {
+    if(user&&!req.body.register) {
         // success
         if(bcrypt.compareSync(password, user.password)) {
             done(null, {id: user.player});
@@ -167,7 +167,7 @@ passport.use("local", new localStrategy({passReqToCallback: true}, async (req: E
         }
     }
     // register
-    else {
+    else if (req.body.register) {
         const hash = bcrypt.hashSync(password, 10);
         var playerId: string;
         // link
@@ -181,6 +181,10 @@ passport.use("local", new localStrategy({passReqToCallback: true}, async (req: E
         }
         dbQuery('INSERT INTO local_users (username, password, player) VALUES (?, ?, ?)', [username, hash, playerId]);
         done(null, {id: playerId});
+    }
+    // fail
+    else {
+        done(null, false);
     }
 }));
 
