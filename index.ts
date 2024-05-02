@@ -198,7 +198,7 @@ passport.use("discord", new discordStrategy({
     const user: any = await dbQueryOne('SELECT * FROM discord_users WHERE discord_id = ?', [profile.id]);
     // initialize
     if(!user) {
-        await dbQuery('INSERT INTO discord_users (discord_id) VALUES (?)', [profile.id]);
+        await dbQuery('INSERT INTO discord_users (discord_id, discord_username) VALUES (?)', [profile.id, profile.username]);
     }
     // login
     else if (user.player) {
@@ -219,15 +219,15 @@ passport.use("discord", new discordStrategy({
 }));
 
 passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (req: Express.Request, username: string, password: string, done: Function) => {
-    const minecraftPlayer: any = await dbQueryOne('SELECT * FROM minecraft.authme WHERE realname = ?', [username]);
+    const authmeAccount: any = await dbQueryOne('SELECT * FROM minecraft.authme WHERE realname = ?', [username]);
     // fail
-    if(!minecraftPlayer||!bcrypt.compareSync(password, minecraftPlayer.password)) {
+    if(!authmeAccount||!bcrypt.compareSync(password, authmeAccount.password)) {
         done(null, false);
     }
-    const user: any = await dbQueryOne('SELECT * FROM minecraft_players WHERE authme_id = ?', [minecraftPlayer.id]);
+    const user: any = await dbQueryOne('SELECT * FROM minecraft_players WHERE minecraft_username = ?', [username]);
     // initialize
     if(!user) {
-        await dbQuery('INSERT INTO minecraft_players (authme_id) VALUES (?)', [minecraftPlayer.id]);
+        await dbQuery('INSERT INTO minecraft_players (minecraft_username) VALUES (?)', [username]);
     }
     // login
     else if (user.player) {
@@ -243,8 +243,8 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
         playerId = await generateId('players');
         dbQuery('INSERT INTO players (id) VALUES (?)', [playerId]);
     }
-    dbQuery('UPDATE minecraft_players SET player = ? WHERE authme_id = ?', [playerId, minecraftPlayer.id]);
-    done(null, {id: playerId});
+    dbQuery('UPDATE minecraft_players SET player = ? WHERE minecraft_username = ?', [playerId, username]);
+    return done(null, {id: playerId});
 }));
 
 // middleware
@@ -403,7 +403,7 @@ app.get('/guild/:id/minecraft', (req: express.Request, res: express.Response) =>
 app.get('/leaderboards', async (req: express.Request, res: express.Response) => {
     const players = await dbQuery('SELECT * FROM players', [])
     const guilds = await dbQuery('SELECT * FROM guilds', [])
-    const minecraft = await dbQuery('SELECT mp.*, a.realname FROM minecraft_players mp RIGHT JOIN minecraft.authme a ON mp.authme_id = a.id', [])
+    const minecraft = await dbQuery('SELECT * FROM minecraft_players', [])
     const minecraftFactions = await dbQuery('SELECT mf.*, f.name FROM minecraft_factions mf RIGHT JOIN minecraft.mf_faction f ON mf.mf_id = f.id', [])
     var discord: any = await dbQuery('SELECT * FROM discord_users', [])
     discord = JSON.parse(JSON.stringify(discord, (key, value) =>
