@@ -191,7 +191,7 @@ passport.use("local", new localStrategy({passReqToCallback: true}, async (req: a
 passport.use("discord", new discordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID || '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
-    callbackURL: "http://localhost/login/discord",
+    callbackURL: process.env.BACKEND_ENDPOINT+"/discord",
     scope: ['identify'],
     passReqToCallback: true
 }, async (req: Express.Request, accessToken: any, refreshToken: any, profile: any, done: Function) => {
@@ -250,7 +250,7 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
 // middleware
 
 const app = express();
-app.use(cors({origin:[process.env.BACKEND_ENDPOINT||'',process.env.FRONTEND_ENDPOINT||"","https://projectdaimon.com","http://localhost:4000","https://masterbaseguild.it"], credentials: true}));
+app.use(cors({origin:[process.env.BACKEND_ENDPOINT||'',process.env.FRONTEND_ENDPOINT||"","https://masterbaseguild.it"], credentials: true}));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
@@ -414,15 +414,15 @@ app.get('/leaderboards', async (req: express.Request, res: express.Response) => 
     res.json({players, guilds, minecraft, minecraftFactions, discord});
 });
 
-app.get('/login/discord', passport.authenticate("discord", {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000"}));
+app.get('/login/discord', passport.authenticate("discord", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}));
 
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
-app.post('/login/local', passport.authenticate("local", {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
+app.post('/login/local', passport.authenticate("local", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT+"/account"}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
 });
 
-app.post('/login/minecraft', passport.authenticate("minecraft", {successRedirect: "http://localhost:4000/account", failureRedirect: "http://localhost:4000/account"}), (req: express.Request, res: express.Response) => {
+app.post('/login/minecraft', passport.authenticate("minecraft", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT+"/account"}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
 });
 
