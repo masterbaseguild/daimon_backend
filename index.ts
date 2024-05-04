@@ -252,7 +252,7 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
 const app = express();
 const corsOptions: cors.CorsOptions = {
     origin: process.env.FRONTEND_ENDPOINT,
-    optionsSuccessStatus: 200
+    credentials: true
 };
 app.use(cors(corsOptions));
 app.use(session({
