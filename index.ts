@@ -250,7 +250,7 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
 // middleware
 
 const app = express();
-app.use(cors({origin:[process.env.BACKEND_ENDPOINT||'',process.env.FRONTEND_ENDPOINT||"","https://masterbaseguild.it"], credentials: true}));
+app.use(cors({origin:[(process.env.BACKEND_ENDPOINT||""),(process.env.FRONTEND_ENDPOINT||""),"https://masterbaseguild.it"], credentials: true}));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
