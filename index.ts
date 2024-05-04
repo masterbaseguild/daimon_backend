@@ -422,12 +422,25 @@ app.get('/login/discord', passport.authenticate("discord", {successRedirect: pro
 
 app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
-app.post('/login/local', passport.authenticate("local", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT+"/account"}), (req: express.Request, res: express.Response) => {
+app.post('/login/local', passport.authenticate("local", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
 });
 
-app.post('/login/minecraft', passport.authenticate("minecraft", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT+"/account"}), (req: express.Request, res: express.Response) => {
+app.post('/login/minecraft', passport.authenticate("minecraft", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
+});
+
+app.post('/player', (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const display = req.body.display;
+        dbQuery('UPDATE players SET display = ? WHERE id = ?', [display, req.user.id])
+            .then(() => {
+                res.status(200).json('success');
+            });
+    }
+    else {
+        res.status(401).json('unauthorized');
+    }
 });
 
 app.post('/logout', (req: express.Request, res: express.Response) => {
@@ -473,6 +486,26 @@ app.post('/guild', (req: express.Request, res: express.Response) => {
 });
 
 app.post('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
+
+app.delete('/user/auths/:service', (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        if(req.params.service === 'local') {
+            dbQuery('DELETE FROM local_users WHERE player = ?', [req.user.id]);
+        }
+        else if(req.params.service === 'discord') {
+            dbQuery('UPDATE discord_users SET player = NULL WHERE player = ?', [req.user.id]);
+        }
+        else if(req.params.service === 'minecraft') {
+            dbQuery('UPDATE minecraft_players SET player = NULL WHERE player = ?', [req.user.id]);
+        }
+        res.status(200).json('success');
+    }
+    else {
+        res.status(401).json('unauthorized');
+    }
+});
+
+app.delete('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
 
 
 server.listen(process.env.PORT,()=>console.log(`Server Start Successful. Database Name: ${process.env.DATABASE_NAME}`));
