@@ -250,7 +250,11 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
 // middleware
 
 const app = express();
-app.use(cors({origin:[(process.env.BACKEND_ENDPOINT||""),(process.env.FRONTEND_ENDPOINT||""),"https://masterbaseguild.it"], credentials: true}));
+const corsOptions = {
+    origin: [process.env.FRONTEND_ENDPOINT||"", "https://masterbaseguild.it"],
+    credentials: true
+};
+app.use(cors(corsOptions));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'daimon',
     resave: true,
@@ -268,7 +272,7 @@ const server = http.createServer(app);
 // routes
 
 app.get('/', (req: express.Request, res: express.Response) => {
-    console.log('ping!');
+    console.log(corsOptions);
     res.send('daimon api');
 });
 
