@@ -191,7 +191,7 @@ passport.use("local", new localStrategy({passReqToCallback: true}, async (req: a
 passport.use("discord", new discordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID || '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
-    callbackURL: process.env.BACKEND_ENDPOINT+"/discord",
+    callbackURL: process.env.BACKEND_ENDPOINT+"/login/discord",
     scope: ['identify'],
     passReqToCallback: true
 }, async (req: Express.Request, accessToken: any, refreshToken: any, profile: any, done: Function) => {
