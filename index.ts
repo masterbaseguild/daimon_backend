@@ -250,9 +250,9 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
 // middleware
 
 const app = express();
-const corsOptions = {
-    origin: [process.env.FRONTEND_ENDPOINT||"", "https://masterbaseguild.it"],
-    credentials: true
+const corsOptions: cors.CorsOptions = {
+    origin: process.env.FRONTEND_ENDPOINT,
+    optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
 app.use(session({
