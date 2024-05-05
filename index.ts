@@ -296,6 +296,20 @@ app.get('/user/auths', async (req: express.Request, res: express.Response) => {
     }
 });
 
+app.get('/user/guildowner', (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        dbQueryOne('SELECT * FROM guilds WHERE player = ?', [req.user.id])
+            .then((row: any) => {
+                if(row) {
+                    res.json(true);
+                }
+                else {
+                    res.json(false);
+                }
+            });
+    }
+});
+
 app.get('/player/:id', (req: express.Request, res: express.Response) => {
     dbQueryOne('SELECT * FROM players WHERE id = ?', [req.params.id])
         .then((row: any) => {
@@ -349,6 +363,18 @@ app.get('/player/:id/minecraft', (req: express.Request, res: express.Response) =
         .then((row: any) => {
             if(row) {
                 res.json(row.score);
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        });
+});
+
+app.get('/guilds', (req: express.Request, res: express.Response) => {
+    dbQuery('SELECT * FROM guilds', [])
+        .then((row: any) => {
+            if(row) {
+                res.json(row);
             }
             else {
                 res.status(404).json('notfound');
@@ -471,12 +497,24 @@ app.post('/message', (req: express.Request, res: express.Response) => {
 
 app.post('/guild', (req: express.Request, res: express.Response) => {
     if(req.user) {
+        dbQueryOne('SELECT * FROM guilds WHERE player = ?', [req.user.id])
+            .then((row: any) => {
+                if(row) {
+                    res.status(403).json('forbidden');
+                }
+            });
         generateId('guilds').then((id: string) => {
             const display = req.body.display;
             const player = req.body.player;
             dbQuery('INSERT INTO guilds (id, display, player) VALUES (?, ?, ?)', [id, display, player])
                 .then(() => {
-                    res.status(201).json('created');
+                    dbQuery('INSERT INTO players_to_guilds (player, guild) VALUES (?, ?)', [player, id])
+                        .then(() => {
+                            dbQuery('UPDATE players SET guild = ? WHERE id = ?', [id, player])
+                                .then(() => {
+                                    res.status(201).json('created');
+                                });
+                        });
                 });
         });
     }
