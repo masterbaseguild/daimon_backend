@@ -82,7 +82,7 @@ const dbQuery = (sql: string, params: string[]) => {
                 }
             })
             .catch((err: any) => {
-                console.log(err);
+                console.error(err);
                 resolve(null);
             });
     });
@@ -100,7 +100,7 @@ const dbQueryOne = (sql: string, params: string[]) => {
                 }
             })
             .catch((err: any) => {
-                console.log(err);
+                console.error(err);
                 resolve(null);
             });
     });
@@ -115,12 +115,11 @@ const s3Query = (path: string) => {
             .then((data: any) => {
                 data.Body.transformToString()
                     .then((body: any) => {
-                        console.log(body);
                         resolve(body);
                     });
             })
             .catch((err: any) => {
-                console.log(err);
+                console.error(err);
                 resolve(null);
             });
     })
@@ -137,7 +136,7 @@ const s3Create = (path: string, body: any) => {
                 resolve(true);
             })
             .catch((err: any) => {
-                console.log(err);
+                console.error(err);
                 resolve(false);
             });
     })
@@ -272,7 +271,6 @@ const server = http.createServer(app);
 // routes
 
 app.get('/', (req: express.Request, res: express.Response) => {
-    console.log(corsOptions);
     res.send('daimon api');
 });
 
@@ -305,6 +303,25 @@ app.get('/user/guildowner', (req: express.Request, res: express.Response) => {
                 }
                 else {
                     res.json(false);
+                }
+            });
+    }
+});
+
+app.get('/user/guilds', (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        // get main guild from players.guild
+        dbQueryOne('SELECT * FROM guilds WHERE id = (SELECT guild FROM players WHERE id = ?)', [req.user.id])
+            .then((row: any) => {
+                if(req.user&&row) {
+                    // get all the other guilds, but only the id and display, from players_to_guilds
+                    dbQuery('SELECT g.id, g.display FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?', [req.user.id])
+                        .then((rows: any) => {
+                            res.json({main: row, guilds: rows});
+                        });
+                }
+                else {
+                    res.status(404).json('notfound');
                 }
             });
     }
@@ -444,9 +461,92 @@ app.get('/leaderboards', async (req: express.Request, res: express.Response) => 
     res.json({players, guilds, minecraft, minecraftFactions, discord});
 });
 
+//leaderboard/:name/:page
+app.get('/leaderboard/:name/:page', async (req: express.Request, res: express.Response) => {
+    const pageSize: any = 10;
+    const name = req.params.name;
+    // if cannot parse page, return 404
+    if(isNaN(parseInt(req.params.page))) {
+        res.status(404).json('notfound');
+        return;
+    }
+    const page = parseInt(req.params.page);
+    const pageOffset = page*pageSize;
+    //switch for name: players, guilds, minecraft, minecraft_factions, discord
+    switch(name) {
+        // join guild.display to players where players.guild = guild.id
+        case 'players':
+            const players = await dbQuery('SELECT players.*, guilds.display AS guild_display FROM players LEFT JOIN guilds ON players.guild = guilds.id ORDER BY score DESC LIMIT ? OFFSET ?', [pageSize, pageOffset])
+            res.json(players);
+            break;
+        // join player.display to guilds where guilds.player = player.id
+        case 'guilds':
+            const guilds = await dbQuery('SELECT g.*, p.display AS player_display FROM guilds g LEFT JOIN players p ON g.player = p.id ORDER BY score DESC LIMIT ? OFFSET ?', [pageSize, pageOffset])
+            res.json(guilds);
+            break;
+        // join player.display to minecraft_players where minecraft_players.player = player.id
+        case 'minecraft':
+            const minecraft = await dbQuery('SELECT mp.*, p.display AS player_display FROM minecraft_players mp LEFT JOIN players p ON mp.player = p.id ORDER BY score DESC LIMIT ? OFFSET ?', [pageSize, pageOffset])
+            res.json(minecraft);
+            break;
+        // join guild.display to minecraft_factions where minecraft_factions.guild = guild.id
+        case 'minecraft_factions':
+            const minecraftFactions = await dbQuery('SELECT mf.*, f.name, g.display AS guild_display FROM minecraft_factions mf JOIN minecraft.mf_faction f ON mf.mf_id = f.id LEFT JOIN guilds g ON mf.guild = g.id ORDER BY score DESC LIMIT ? OFFSET ?', [pageSize, pageOffset])
+            res.json(minecraftFactions);
+            break;
+        // join player.display to discord_users where discord_users.player = player.id
+        case 'discord':
+            var discord: any = await dbQuery('SELECT ds.*, p.display AS player_display FROM discord_users ds LEFT JOIN players p ON ds.player = p.id ORDER BY score DESC LIMIT ? OFFSET ?', [pageSize, pageOffset])
+            discord = JSON.parse(JSON.stringify(discord, (key, value) =>
+                typeof value === 'bigint'
+                    ? value.toString()
+                    : value // return everything else unchanged
+            ));
+            res.json(discord);
+            break;
+        default:
+            res.status(404).json('notfound');
+    
+    }
+});
+
+app.get('/leaderboard/:name', async (req: express.Request, res: express.Response) => {
+    // return how many pages there are
+    const pageSize = 10;
+    const name = req.params.name;
+    //switch for name: players, guilds, minecraft, minecraft_factions, discord
+    switch(name) {
+        case 'players':
+            const players: any = await dbQuery('SELECT * FROM players', [])
+            res.json(Math.ceil(players.length/pageSize));
+            break;
+        case 'guilds':
+            const guilds: any = await dbQuery('SELECT * FROM guilds', [])
+            res.json(Math.ceil(guilds.length/pageSize));
+            break;
+        case 'minecraft':
+            const minecraft: any = await dbQuery('SELECT * FROM minecraft_players', [])
+            res.json(Math.ceil(minecraft.length/pageSize));
+            break;
+        case 'minecraft_factions':
+            const minecraftFactions: any = await dbQuery('SELECT * FROM minecraft_factions', [])
+            res.json(Math.ceil(minecraftFactions.length/pageSize));
+            break;
+        case 'discord':
+            const discord: any = await dbQuery('SELECT * FROM discord_users', [])
+            res.json(Math.ceil(discord.length/pageSize));
+            break;
+        default:
+            res.status(404).json('notfound');
+    }
+});
+
 app.get('/login/discord', passport.authenticate("discord", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}));
 
-app.get('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
+app.get('*', (req: express.Request, res: express.Response) => {
+    console.log("GET "+req.url+" not found");
+    res.status(404).json('notfound')
+});
 
 app.post('/login/local', passport.authenticate("local", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}), (req: express.Request, res: express.Response) => {
     res.status(200).json('success');
@@ -457,6 +557,19 @@ app.post('/login/minecraft', passport.authenticate("minecraft", {successRedirect
 });
 
 app.post('/player', (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const display = req.body.display;
+        dbQuery('UPDATE players SET display = ? WHERE id = ?', [display, req.user.id])
+            .then(() => {
+                res.status(200).json('success');
+            });
+    }
+    else {
+        res.status(401).json('unauthorized');
+    }
+});
+
+app.post('/player/display', (req: express.Request, res: express.Response) => {
     if(req.user) {
         const display = req.body.display;
         dbQuery('UPDATE players SET display = ? WHERE id = ?', [display, req.user.id])
@@ -523,7 +636,56 @@ app.post('/guild', (req: express.Request, res: express.Response) => {
     }
 });
 
-app.post('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
+//user/password
+app.post('/user/password', async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const oldPassword = req.body.password;
+        const newPassword = req.body.newPassword;
+        const user: any = await dbQueryOne('SELECT * FROM local_users WHERE player = ?', [req.user.id]);
+        if(user) {
+            if(bcrypt.compareSync(oldPassword, user.password)) {
+                const hash = bcrypt.hashSync(newPassword, 10);
+                dbQuery('UPDATE local_users SET password = ? WHERE player = ?', [hash, req.user.id]);
+                res.status(200).json('success');
+            }
+            else {
+                res.status(403).json('forbidden');
+            }
+        }
+        else {
+            res.status(404).json('notfound');
+        }
+    }
+    else {
+        res.status(401).json('unauthorized');
+    }
+});
+
+//user/username
+app.post('/user/username', async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const newUsername = req.body.username;
+        const password = req.body.password;
+        const user: any = await dbQueryOne('SELECT * FROM local_users WHERE player = ?', [req.user.id]);
+        if(user) {
+            if(bcrypt.compareSync(password, user.password)) {
+                dbQuery('UPDATE local_users SET username = ? WHERE player = ?', [newUsername, req.user.id]);
+                res.status(200).json('success');
+            }
+            else {
+                res.status(403).json('forbidden');
+            }
+        }
+        else {
+            res.status(404).json('notfound');
+        }
+    }
+});
+
+app.post('*', (req: express.Request, res: express.Response) => {
+    console.log("POST "+req.url+" not found");
+    res.status(404).json('notfound')
+});
 
 app.delete('/user/auths/:service', (req: express.Request, res: express.Response) => {
     if(req.user) {
@@ -543,7 +705,43 @@ app.delete('/user/auths/:service', (req: express.Request, res: express.Response)
     }
 });
 
-app.delete('*', (req: express.Request, res: express.Response) => res.status(404).json('notfound'));
+app.delete('/user', async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        // if the player has a guild, refuse to delete
+        const guild = await dbQueryOne('SELECT * FROM guilds WHERE player = ?', [req.user.id]);
+        if(guild) {
+            res.status(403).json('forbidden');
+            return;
+        }
+        // unlink minecraft and discord, if linked
+        await dbQuery('UPDATE discord_users SET player = NULL WHERE player = ?', [req.user.id]);
+        await dbQuery('UPDATE minecraft_players SET player = NULL WHERE player = ?', [req.user.id]);
+        // remove player from all guilds
+        await dbQuery('DELETE FROM players_to_guilds WHERE player = ?', [req.user.id]);
+        // remove all messages involving the player
+        await dbQuery('DELETE FROM messages WHERE player = ?', [req.user.id]);
+        // delete the local user
+        await dbQuery('DELETE FROM local_users WHERE player = ?', [req.user.id]);
+        // if player has bonus score, store id, display and bonus_score in the bonus_score_backup table
+        const player: any = await dbQueryOne('SELECT * FROM players WHERE id = ?', [req.user.id]);
+        if(player&&player.bonus_score) {
+            dbQuery('INSERT INTO bonus_score_backup (id, display, bonus_score) VALUES (?, ?, ?)', [player.id, player.display, player.bonus_score]);
+        }
+        // delete the player
+        await dbQuery('DELETE FROM players WHERE id = ?', [req.user.id]);
+        req.logout(() => {
+            res.status(200).json('success');
+        });
+    }
+    else {
+        res.status(401).json('unauthorized');
+    }
+});
+
+app.delete('*', (req: express.Request, res: express.Response) => {
+    console.log("DELETE "+req.url+" not found");
+    res.status(404).json('notfound')
+});
 
 
-server.listen(process.env.PORT,()=>console.log(`Server Start Successful. Database Name: ${process.env.DATABASE_NAME}`));
+server.listen(process.env.PORT,()=>console.log(`Server Start Successful.`));
