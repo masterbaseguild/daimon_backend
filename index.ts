@@ -331,7 +331,8 @@ app.get("/user/auth/logout", (req: express.Request, res: express.Response) => {
 
 app.get("/user/guild", async (req: express.Request, res: express.Response) => {
     if(req.user) {
-        const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id]);
+        const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
+        const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
         if(guild) {
             res.json(guild);
         }
@@ -447,6 +448,16 @@ app.get("/player/:id/guilds", async (req: express.Request, res: express.Response
     const guilds = await dbQuery("SELECT g.id, g.display FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?", [req.params.id])
     if(guilds) {
         res.json(guilds);
+    }
+    else {
+        res.status(404).json("notfound");
+    }
+});
+
+app.get("/players", async (req: express.Request, res: express.Response) => {
+    const players = await dbQuery("SELECT * FROM players", [])
+    if(players) {
+        res.json(players);
     }
     else {
         res.status(404).json("notfound");
@@ -588,8 +599,28 @@ app.post("/user/guild", async (req: express.Request, res: express.Response) => {
         if(guild) {
             Promise.all([
                 dbQuery("UPDATE players SET guild = ? WHERE id = ?", [guild.id, user.id]),
-                dbQuery("DELETE FROM messages WHERE user = ? AND guild = ?", [user.id, guild.id])
+                dbQuery("DELETE FROM messages WHERE player = ? AND guild = ?", [user.id, guild.id]),
             ])
+                .then(() => {
+                    res.status(200).json("success");
+                });
+        }
+        else {
+            res.status(404).json("notfound");
+        }
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
+app.post("/user/guild/lfp", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
+        const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
+        const lfp: string = guild.lfp ? "0" : "1";
+        if(guild) {
+            dbQuery("UPDATE guilds SET lfp = ? WHERE id = ?", [lfp, guild.id])
                 .then(() => {
                     res.status(200).json("success");
                 });
@@ -614,7 +645,7 @@ app.post("/user/guild/member", async (req: express.Request, res: express.Respons
         if(member) {
             Promise.all([
                 dbQuery("INSERT INTO players_to_guilds (player, guild) VALUES (?, ?)", [member.id, guild.id]),
-                dbQuery("DELETE FROM messages WHERE user = ? AND guild = ?", [member.id, guild.id])
+                dbQuery("DELETE FROM messages WHERE player = ? AND guild = ?", [member.id, guild.id])
             ])
                 .then(() => {
                     res.status(200).json("success");
@@ -629,17 +660,24 @@ app.post("/user/guild/member", async (req: express.Request, res: express.Respons
     }
 });
 
-//user/guilds: join a guild, only if it is open or if the user is invited
 app.post("/user/guilds", async (req: express.Request, res: express.Response) => {
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [req.body.id]);
         if(guild) {
-            const message: any = await dbQueryOne("SELECT * FROM messages WHERE type = 0 AND user = ? AND guild = ?", [user.id, guild.id]);
+            const message: any = await dbQueryOne("SELECT * FROM messages WHERE type = 0 AND player = ? AND guild = ?", [user.id, guild.id]);
             if(message||guild.lfp) {
-                dbQuery("UPDATE players SET guild = ? WHERE id = ?", [guild.id, user.id])
+                dbQuery("INSERT INTO players_to_guilds (player, guild) VALUES (?, ?)", [user.id, guild.id])
                     .then(() => {
-                        res.status(200).json("success");
+                        if(!user.guild) {
+                            dbQuery("UPDATE players SET guild = ? WHERE id = ?", [guild.id, user.id])
+                                .then(() => {
+                                    res.status(200).json("success");
+                                });
+                        }
+                        else {
+                            res.status(200).json("success");
+                        }
                     });
             }
             else {
@@ -682,7 +720,7 @@ app.post("/message", async (req: express.Request, res: express.Response) => {
             default:
                 res.status(400).json("badrequest");
         }
-        dbQuery("INSERT INTO messages (type, user, guild) VALUES (?, ?, ?)", [type, user, guild])
+        dbQuery("INSERT INTO messages (type, player, guild) VALUES (?, ?, ?)", [type, user, guild])
             .then(() => {
                 res.status(201).json("created");
             });
@@ -692,19 +730,18 @@ app.post("/message", async (req: express.Request, res: express.Response) => {
     }
 });
 
-//message/delete: delete a message (only if you are the user or the guild owner)
 app.post("/message/delete", async (req: express.Request, res: express.Response) => {
     if(req.user) {
         const type = req.body.type;
-        const user = req.body.user;
+        const player = req.body.player;
         const guild = req.body.guild;
-        const message: any = await dbQueryOne("SELECT * FROM messages WHERE type = ? AND user = ? AND guild = ?", [type, user, guild]);
+        const message: any = await dbQueryOne("SELECT * FROM messages WHERE type = ? AND player = ? AND guild = ?", [type, player, guild]);
         if(message) {
-            const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.body.user]);
+            const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.body.player]);
             const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [req.body.guild]);
             const owner: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [guild.player]);
-            if(user.id === req.user.id||owner.id === req.user.id) {
-                dbQuery("DELETE FROM messages WHERE type = ? AND user = ? AND guild = ?", [type, user.id, guild.id])
+            if(player.id === req.user.id||owner.id === req.user.id) {
+                dbQuery("DELETE FROM messages WHERE type = ? AND player = ? AND guild = ?", [type, player.id, guild.id])
                     .then(() => {
                         res.status(200).json("success");
                     });
@@ -724,20 +761,23 @@ app.post("/message/delete", async (req: express.Request, res: express.Response) 
 
 app.post("/guild", async (req: express.Request, res: express.Response) => {
     if(req.user) {
-        const guild: any = dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id])
+        const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id])
         if(guild) {
             res.status(403).json("forbidden");
+            return;
         }
         generateId("guilds").then((id: string) => {
             const display = req.body.display;
             const player = req.body.player;
-            Promise.all([
-                dbQuery("INSERT INTO guilds (id, display, player) VALUES (?, ?, ?)", [id, display, player]),
-                dbQuery("INSERT INTO players_to_guilds (player, guild) VALUES (?, ?)", [player, id]),
-                dbQuery("UPDATE players SET guild = ? WHERE id = ?", [id, player])
-            ]).then(() => {
-                res.status(201).json("created");
-            });
+            dbQuery("INSERT INTO guilds (id, display, player) VALUES (?, ?, ?)", [id, display, player])
+                .then(() => {
+                    Promise.all([
+                        dbQuery("INSERT INTO players_to_guilds (player, guild) VALUES (?, ?)", [player, id]),
+                        dbQuery("UPDATE players SET guild = ? WHERE id = ?", [id, player])
+                    ]).then(() => {
+                        res.status(201).json("created");
+                    });
+                });
         });
     }
     else {
@@ -816,6 +856,31 @@ app.delete("/user", async (req: express.Request, res: express.Response) => {
         req.logout(() => {
             res.status(200).json("success");
         });
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
+//user/guilds/:id
+app.delete("/user/guilds/:id", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [req.params.id]);
+        if(guild) {
+            const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
+            if(player.guild === guild.id) {
+                res.status(403).json("forbidden")
+            }
+            else {
+                dbQuery("DELETE FROM players_to_guilds WHERE player = ? AND guild = ?", [req.user.id, guild.id])
+                    .then(() => {
+                        res.status(200).json("success");
+                    });
+            }
+        }
+        else {
+            res.status(404).json("notfound");
+        }
     }
     else {
         res.status(401).json("unauthorized");
