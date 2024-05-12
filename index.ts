@@ -10,9 +10,8 @@ import cookieParser from "cookie-parser";
 import crypto from "crypto";
 import http from "http";
 import mariadb from "mariadb";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import "dotenv/config";
-import { userInfo } from "os";
 
 declare global {
     namespace Express {
@@ -29,7 +28,7 @@ declare global {
         hairColor: string;
         hairStyle: string;
     }
-    type tableName = "players" | "guilds" | "messages" | "players_to_guilds" | "discord_users" | "minecraft_players" | "local_users" | "minecraft_factions";
+    type tableName = "players" | "guilds" | "messages" | "players_to_guilds" | "discord_users" | "minecraft_players" | "local_users" | "minecraft_factions" | "characters" | "cosmetics";
 }
 
 // utility functions
@@ -133,6 +132,34 @@ const s3Query = (path: string) => {
             });
     })
 };
+
+const s3QueryRaw = async (res: any, path: string) => {
+    console.log("[S3] "+path);
+    const headResponse: any = await s3.send(new HeadObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: path
+    }));
+    res.set({
+        "Content-Type": headResponse.ContentType,
+        "Content-Length": headResponse.ContentLength,
+        "ETag": headResponse.ETag,
+    });
+    const response: any = await s3.send(new GetObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: path
+    }));
+    const stream = response.Body;
+    stream.on("data", (chunk: any) => {
+        res.write(chunk);
+    });
+    stream.once("end", () => {
+        res.end();
+    });
+    stream.once("error", (err: any) => {
+        console.error(err);
+        res.status(500).send("Error retrieving image");
+    });
+}
 
 const s3Create = (path: string, body: any) => {
     return new Promise<boolean>((resolve) => {
@@ -370,6 +397,37 @@ app.get("/user/guilds", async (req: express.Request, res: express.Response) => {
     }
     else {
         res.status(401).json("unauthorized");
+    }
+});
+
+app.get("/user/character", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
+        if(!character) {
+            res.status(404).json("notfound");
+            return;
+        }
+        if(character.hair_style) character.hair_style = await dbQueryOne("SELECT * FROM cosmetics WHERE id = ?", [character.hair_style]);
+        if(character.facial_hair) character.facial_hair = await dbQueryOne("SELECT * FROM cosmetics WHERE id = ?", [character.facial_hair]);
+        res.json(character);
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+})
+
+app.get("/cosmetics", async (req: express.Request, res: express.Response) => {
+    const cosmetics: any = await dbQuery("SELECT * FROM cosmetics", []);
+    res.json(cosmetics);
+});
+
+app.get("/cosmetics/:id/:index", async (req: express.Request, res: express.Response) => {
+    try {
+        s3QueryRaw(res, `cosmetics/${req.params.id}/${req.params.index}.png`);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).send('Error retrieving image');
     }
 });
 
@@ -949,6 +1007,18 @@ app.post("/user/auth/local/username", async (req: express.Request, res: express.
         res.status(401).json("unauthorized");
     }
 });
+
+app.post("/user/character", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const id = await generateId("characters");
+        await dbQuery("INSERT INTO characters (id, gender, eye_color, hair_color, skin_color, hair_style, facial_hair, player) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, req.body.gender, req.body.eyeColor, req.body.hairColor, req.body.skinColor, req.body.hairStyle, req.body.facialHair, req.user.id]);
+        res.status(201).json("created");
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+})
 
 app.post("*", (req: express.Request, res: express.Response) => {
     console.log("POST "+req.url+" not found");
