@@ -416,6 +416,21 @@ app.get("/user/character", async (req: express.Request, res: express.Response) =
     }
 })
 
+app.get("/user/character/boolean", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
+        if(character) {
+            res.json(true);
+        }
+        else {
+            res.json(false);
+        }
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+})
+
 app.get("/cosmetics", async (req: express.Request, res: express.Response) => {
     const cosmetics: any = await dbQuery("SELECT * FROM cosmetics", []);
     res.json(cosmetics);
@@ -483,6 +498,28 @@ app.get("/player/:id", async (req: express.Request, res: express.Response) => {
         player.minecraft = minecraft;
     }
     res.json(player);
+});
+
+app.get("/player/:id/character", async (req: express.Request, res: express.Response) => {
+    const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.params.id]);
+    if(character) {
+        if(character.hair_style) character.hair_style = await dbQueryOne("SELECT * FROM cosmetics WHERE id = ?", [character.hair_style]);
+        if(character.facial_hair) character.facial_hair = await dbQueryOne("SELECT * FROM cosmetics WHERE id = ?", [character.facial_hair]);
+        res.json(character);
+    }
+    else {
+        res.status(404).json("notfound");
+    }
+});
+
+app.get("/player/:id/character/boolean", async (req: express.Request, res: express.Response) => {
+    const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.params.id]);
+    if(character) {
+        res.json(true);
+    }
+    else {
+        res.json(false);
+    }
 });
 
 app.get("/player/:id/guild", async (req: express.Request, res: express.Response) => {
@@ -1010,10 +1047,18 @@ app.post("/user/auth/local/username", async (req: express.Request, res: express.
 
 app.post("/user/character", async (req: express.Request, res: express.Response) => {
     if(req.user) {
-        const id = await generateId("characters");
-        await dbQuery("INSERT INTO characters (id, gender, eye_color, hair_color, skin_color, hair_style, facial_hair, player) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [id, req.body.gender, req.body.eyeColor, req.body.hairColor, req.body.skinColor, req.body.hairStyle, req.body.facialHair, req.user.id]);
-        res.status(201).json("created");
+        const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
+        if(character) {
+            dbQuery("UPDATE characters SET gender = ?, eye_color = ?, hair_color = ?, skin_color = ?, hair_style = ?, facial_hair = ? WHERE id = ?",
+            [req.body.gender, req.body.eyeColor, req.body.hairColor, req.body.skinColor, req.body.hairStyle, req.body.facialHair, character.id]);
+            res.status(200).json("success");
+        }
+        else {
+            const id = await generateId("characters");
+            await dbQuery("INSERT INTO characters (id, gender, eye_color, hair_color, skin_color, hair_style, facial_hair, player) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [id, req.body.gender, req.body.eyeColor, req.body.hairColor, req.body.skinColor, req.body.hairStyle, req.body.facialHair, req.user.id]);
+            res.status(201).json("created");
+        }
     }
     else {
         res.status(401).json("unauthorized");
@@ -1045,6 +1090,22 @@ app.delete("/user", async (req: express.Request, res: express.Response) => {
         req.logout(() => {
             res.status(200).json("success");
         });
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
+app.delete("/user/character", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
+        if(character) {
+            dbQuery("DELETE FROM characters WHERE id = ?", [character.id]);
+            res.status(200).json("success");
+        }
+        else {
+            res.status(404).json("notfound");
+        }
     }
     else {
         res.status(401).json("unauthorized");
