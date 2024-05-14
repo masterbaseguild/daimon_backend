@@ -311,7 +311,22 @@ app.get("/", (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user", (req: express.Request, res: express.Response) => {
-    res.json(req.user);
+    if(req.user) {
+        res.json(req.user.id);
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
+app.get("/user/display", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const display: any = await dbQueryOne("SELECT display FROM players WHERE id = ?", [req.user.id]);
+        res.json(display);
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
 });
 
 app.get("/user/auth", async (req: express.Request, res: express.Response) => {
@@ -372,6 +387,21 @@ app.get("/user/guild", async (req: express.Request, res: express.Response) => {
     }
 });
 
+app.get("/user/guild/leader", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const leader: any = await dbQueryOne("SELECT id FROM guilds WHERE player = ?", [req.user.id]);
+        if(leader) {
+            res.json(true);
+        }
+        else {
+            res.json(false);
+        }
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
 app.get("/user/guild/messages", async (req: express.Request, res: express.Response) => {
     if(req.user) {
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id]);
@@ -390,6 +420,21 @@ app.get("/user/guilds", async (req: express.Request, res: express.Response) => {
         const guilds = await dbQuery("SELECT g.id, g.display, g.score FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?", [req.user.id])
         if(guilds) {
             res.json(guilds);
+        }
+        else {
+            res.status(404).json("notfound");
+        }
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
+app.get("/user/guilds/count", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const guilds: any = await dbQuery("SELECT g.id, g.display FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?", [req.user.id])
+        if(guilds) {
+            res.json(guilds.length);
         }
         else {
             res.status(404).json("notfound");
