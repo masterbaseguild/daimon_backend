@@ -319,10 +319,20 @@ app.get("/user", (req: express.Request, res: express.Response) => {
     }
 });
 
+app.get("/user/score", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const score: any = await dbQueryOne("SELECT score FROM players WHERE id = ?", [req.user.id]);
+        res.json(score.score);
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
 app.get("/user/display", async (req: express.Request, res: express.Response) => {
     if(req.user) {
         const display: any = await dbQueryOne("SELECT display FROM players WHERE id = ?", [req.user.id]);
-        res.json(display);
+        res.json(display.display);
     }
     else {
         res.status(401).json("unauthorized");
@@ -687,11 +697,11 @@ app.get("*", (req: express.Request, res: express.Response) => {
     res.status(404).json("notfound")
 });
 
-app.post("/user/auth/local", passport.authenticate("local", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}), (req: express.Request, res: express.Response) => {
+app.post("/user/auth/local", passport.authenticate("local"), (req: express.Request, res: express.Response) => {
     res.status(200).json("success");
 });
 
-app.post("/user/auth/minecraft", passport.authenticate("minecraft", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}), (req: express.Request, res: express.Response) => {
+app.post("/user/auth/minecraft", passport.authenticate("minecraft"), (req: express.Request, res: express.Response) => {
     res.status(200).json("success");
 });
 
