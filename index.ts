@@ -12,6 +12,7 @@ import http from "http";
 import mariadb from "mariadb";
 import { HeadObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import "dotenv/config";
+import axios from "axios";
 
 declare global {
     namespace Express {
@@ -28,7 +29,7 @@ declare global {
         hairColor: string;
         hairStyle: string;
     }
-    type tableName = "players" | "guilds" | "messages" | "players_to_guilds" | "discord_users" | "minecraft_players" | "local_users" | "minecraft_factions" | "characters" | "cosmetics";
+    type tableName = "players" | "guilds" | "messages" | "players_to_guilds" | "discord_users" | "minecraft_players" | "local_users" | "minecraft_factions" | "characters" | "cosmetics" | "feed";
 }
 
 // utility functions
@@ -70,13 +71,14 @@ const s3 = new S3Client({
     region: process.env.S3_REGION
 });
 
-const dbQuery = (sql: string, params: string[]) => {
+const dbQuery = (sql: string, params: string[], limit?: number) => {
     return new Promise((resolve) => {
         const parameters = params.map((param) => {
             return "'"+param+"'";
         })
+        if(limit) parameters.push(limit.toString());
         console.log("[DATABASE](N) "+sql.replace(/\?/g, (match) => {return parameters.shift() || "MISSING"}));
-        database.query(sql, params)
+        database.query(sql, [...params, limit])
             .then((rows: any) => {
                 if(rows) {
                     resolve(rows);
@@ -309,6 +311,62 @@ const server = http.createServer(app);
 app.get("/", (req: express.Request, res: express.Response) => {
     res.send("daimon api");
 });
+
+/* async function fetchYouTubeVideos () {
+    const channelId = process.env.YOUTUBE_CHANNEL_ID;
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const url = "https://www.googleapis.com/youtube/v3/search";
+    const params = {
+        part: "snippet",
+        channelId: channelId,
+        key: apiKey,
+        maxResults: 80,
+        order: "date",
+        pageToken: "CDIQAA"
+    };
+    const response = await axios.get(url, {params});
+    return response.data.items;
+}
+
+function convertToFeed (id: string, item: any) {
+    //convert timestamp "2024-07-25T17:00:12Z" to mariadb timestamp
+    const newTimestamp = item.snippet.publishedAt.replace("T", " ").replace("Z", "");
+    return {
+        id: id,
+        timestamp: newTimestamp,
+        display: item.snippet.title,
+        thumbnail: item.snippet.thumbnails.default.url,
+        description: item.snippet.description,
+        youtube_video: "https://www.youtube.com/watch?v="+item.id.videoId
+    };
+}
+
+app.get("/fetchfeed", async (req: express.Request, res: express.Response) => {
+    const videos = await fetchYouTubeVideos();
+    //generate ids
+    const ids = [];
+    for(let i = 0; i < videos.length; i++) {
+        ids.push(await generateId("feed"));
+    }
+    //convert to feed
+    const feed = [];
+    for(let i = 0; i < videos.length; i++) {
+        feed.push(convertToFeed(ids[i], videos[i]));
+    }
+    //insert into database
+    for(let i = 0; i < feed.length; i++) {
+        const item = feed[i];
+        dbQuery("INSERT INTO feed (id, timestamp, display, thumbnail, description, youtube_video) VALUES (?, ?, ?, ?, ?, ?)", [item.id, item.timestamp, item.display, item.thumbnail, item.description, item.youtube_video]);
+    }
+    res.json(feed);
+}); */
+
+app.get("/feed/:count", async (req: express.Request, res: express.Response) => {
+    console.log("GET /feed");
+    const count = Number(req.params.count);
+    const feed = await dbQuery("SELECT * FROM feed ORDER BY timestamp DESC LIMIT ?", [], count);
+    res.json(feed);
+})
 
 app.get("/user", (req: express.Request, res: express.Response) => {
     if(req.user) {
