@@ -368,6 +368,22 @@ app.get("/feed/:count", async (req: express.Request, res: express.Response) => {
     res.json(feed);
 })
 
+app.get("/team", async (req: express.Request, res: express.Response) => {
+    console.log("GET /team");
+    const team = await dbQuery("SELECT * FROM team", []);
+    res.json(team);
+});
+
+app.get("/team/:name", async (req: express.Request, res: express.Response) => {
+    try {
+        s3QueryRaw(res, `team/${req.params.name}.png`);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).send('Error retrieving image');
+    }
+});
+
 app.get("/user", (req: express.Request, res: express.Response) => {
     if(req.user) {
         res.json(req.user.id);
