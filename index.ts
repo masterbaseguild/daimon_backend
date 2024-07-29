@@ -384,6 +384,12 @@ app.get("/team/:name", async (req: express.Request, res: express.Response) => {
     }
 });
 
+app.get("/jobs", async (req: express.Request, res: express.Response) => {
+    console.log("GET /jobs");
+    const jobs = await dbQuery("SELECT * FROM jobs", []);
+    res.json(jobs);
+});
+
 app.get("/user", (req: express.Request, res: express.Response) => {
     if(req.user) {
         res.json(req.user.id);
