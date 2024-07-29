@@ -368,6 +368,12 @@ app.get("/feed/:count", async (req: express.Request, res: express.Response) => {
     res.json(feed);
 })
 
+app.get("/static/:path", async (req: express.Request, res: express.Response) => {
+    // mp4 videos stored locally in the /static folder
+    const path = req.params.path;
+    res.sendFile(path, {root: "./static"});
+});
+
 app.get("/team", async (req: express.Request, res: express.Response) => {
     console.log("GET /team");
     const team = await dbQuery("SELECT * FROM team", []);
