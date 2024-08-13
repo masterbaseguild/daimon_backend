@@ -572,6 +572,64 @@ app.get("/user/character/boolean", async (req: express.Request, res: express.Res
     }
 })
 
+app.get('/item/:id', (req: express.Request, res: express.Response) => {
+    dbQueryOne('SELECT * FROM items WHERE id = ?', [req.params.id])
+        .then((row: any) => {
+            if(row) {
+                // invisible and intangible blocks (air)
+                if(row.type===3) {
+                    row.isOpaque = false;
+                    row.isConcrete = false;
+                    res.json(row);
+                }
+                // tangible blocks (opaque or transparent)
+                if(row.type===1||row.type===2)
+                    s3Query(`blocks/${row.id}.png`)
+                        .then((data: any) => {
+                            if(data) {
+                                row.texture = data;
+                                row.isConcrete = true;
+                                row.isOpaque = true;
+                                if(row.type===2) row.isOpaque = false;
+                                res.json(row);
+                            }
+                            else {
+                                res.status(404).json('notfound');
+                            }
+                        });
+                // models
+                else if(row.type===4)
+                    s3Query(`models/${row.id}.obj`)
+                        .then((data: any) => {
+                            if(data) {
+                                row.model = data;
+                                res.json(row);
+                            }
+                            else {
+                                res.status(404).json('notfound');
+                            }
+                        });
+                else
+                // items
+                    s3Query(`items/${row.id}.png`)
+                        .then((data: any) => {
+                            if(data) {
+                                row.texture = data;
+                                res.json(row);
+                            }
+                            else {
+                                res.status(404).json('notfound');
+                            }
+                        }
+                    );
+            }
+            else {
+                res.status(404).json('notfound');
+            }
+        }
+    );
+});
+
 app.get("/cosmetics", async (req: express.Request, res: express.Response) => {
     const cosmetics: any = await dbQuery("SELECT * FROM cosmetics", []);
     res.json(cosmetics);
