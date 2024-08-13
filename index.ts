@@ -584,22 +584,14 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                     return;
                 }
                 // tangible blocks (opaque or transparent)
-                if(row.type===1||row.type===2)
-                    s3Query(`blocks/${row.id}.png`)
-                        .then((data: any) => {
-                            if(data) {
-                                row.texture = data;
-                                row.isConcrete = true;
-                                row.isOpaque = true;
-                                if(row.type===2) row.isOpaque = false;
-                                res.json(row);
-                                return;
-                            }
-                            else {
-                                res.status(404).json('notfound');
-                                return;
-                            }
-                        });
+                if(row.type===1||row.type===2) {
+                    row.texture = process.env.S3_ENDPOINT+"blocks/"+row.id+".png";
+                    row.isConcrete = true;
+                    row.isOpaque = true;
+                    if(row.type===2) row.isOpaque = false;
+                    res.json(row);
+                    return;
+                }
                 // models
                 else if(row.type===4)
                     s3Query(`models/${row.id}.obj`)
