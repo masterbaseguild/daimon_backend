@@ -581,6 +581,7 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                     row.isOpaque = false;
                     row.isConcrete = false;
                     res.json(row);
+                    return;
                 }
                 // tangible blocks (opaque or transparent)
                 if(row.type===1||row.type===2)
@@ -592,9 +593,11 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                                 row.isOpaque = true;
                                 if(row.type===2) row.isOpaque = false;
                                 res.json(row);
+                                return;
                             }
                             else {
                                 res.status(404).json('notfound');
+                                return;
                             }
                         });
                 // models
@@ -604,9 +607,11 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                             if(data) {
                                 row.model = data;
                                 res.json(row);
+                                return;
                             }
                             else {
                                 res.status(404).json('notfound');
+                                return;
                             }
                         });
                 else
@@ -619,12 +624,14 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                             }
                             else {
                                 res.status(404).json('notfound');
+                                return;
                             }
                         }
                     );
             }
             else {
                 res.status(404).json('notfound');
+                return;
             }
         }
     );
