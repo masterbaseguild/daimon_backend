@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  daimon_backend_1:
+    image: daimon_backend:latest
+    ports:
+      - "8081:80"
+    networks:
+      - daimon
+    restart: always
+  daimon_backend_2:
+    image: daimon_backend:latest
+    ports:
+      - "8082:80"
+    networks:
+      - daimon
+    restart: always
+  daimon_backend_3:
+    image: daimon_backend:latest
+    ports:
+      - "8083:80"
+    networks:
+      - daimon
+    restart: always
+
+networks:
+  daimon:
+    driver: bridge
