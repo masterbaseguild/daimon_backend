@@ -404,6 +404,16 @@ app.get("/user", (req: express.Request, res: express.Response) => {
     }
 });
 
+app.get("/user/lfg", async (req: express.Request, res: express.Response) => {
+    if(req.user) {
+        const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
+        res.json(player.lfg);
+    }
+    else {
+        res.status(401).json("unauthorized");
+    }
+});
+
 app.get("/user/score", async (req: express.Request, res: express.Response) => {
     if(req.user) {
         const score: any = await dbQueryOne("SELECT score FROM players WHERE id = ?", [req.user.id]);
