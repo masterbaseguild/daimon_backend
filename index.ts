@@ -12,7 +12,6 @@ import http from "http";
 import mariadb from "mariadb";
 import { HeadObjectCommand, GetObjectCommand, PutObjectCommand, S3Client, ListBucketsCommand } from "@aws-sdk/client-s3";
 import "dotenv/config";
-import * as minio from "minio";
 
 declare global {
     namespace Express {
@@ -68,17 +67,7 @@ const database = mariadb.createPool({
 });
 
 const s3 = new S3Client({
-    endpoint: "https://daimon.fsn1.your-objectstorage.com",
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "7WORBCL3857K3PB3BTQC",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "vAUmCoRR3TEBkqzBWR3WjvKmHoX9IMHSy59a4gUQ"
-    },
-});
-
-const minioclient = new minio.Client({
-    endPoint: "fsn1.your-objectstorage.com",
-    accessKey: process.env.AWS_ACCESS_KEY_ID || "",
-    secretKey: process.env.AWS_SECRET_ACCESS_KEY || ""
+    region: process.env.S3_REGION
 });
 
 const dbQuery = (sql: string, params: string[], limit?: number) => {
@@ -320,11 +309,6 @@ const server = http.createServer(app);
 
 app.get("/", (req: express.Request, res: express.Response) => {
     res.send("daimon api");
-});
-
-app.get("/test", async (req: express.Request, res: express.Response) => {
-    const buckets = await minioclient.listBuckets();
-    res.json(buckets);
 });
 
 /* async function fetchYouTubeVideos () {
