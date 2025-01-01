@@ -506,30 +506,7 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
     dbQueryOne('SELECT * FROM items WHERE id = ?', [req.params.id])
         .then((row: any) => {
             if(row) {
-                // invisible and intangible blocks (air)
-                if(row.type===3) {
-                    row.isOpaque = false;
-                    row.isConcrete = false;
-                    res.json(row);
-                    return;
-                }
-                // tangible blocks (opaque or transparent)
-                if(row.type===1||row.type===2) {
-                    row.texture = process.env.MINIO_URL+"blocks/"+row.id+".png";
-                    row.isConcrete = true;
-                    row.isOpaque = true;
-                    if(row.type===2) row.isOpaque = false;
-                    res.json(row);
-                    return;
-                }
-                // models
-                else if(row.type===4) {
-                    row.model = process.env.MINIO_URL+"models/"+row.id+".obj";
-                }
-                // items
-                else {
-                    row.texture = process.env.MINIO_URL+"items/"+row.id+".png";
-                }
+                res.json(row);
             }
             else {
                 res.status(404).json('notfound');
