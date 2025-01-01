@@ -10,7 +10,6 @@ import cookieParser from "cookie-parser";
 import crypto from "crypto";
 import http from "http";
 import mariadb from "mariadb";
-import { HeadObjectCommand, GetObjectCommand, PutObjectCommand, S3Client, ListBucketsCommand } from "@aws-sdk/client-s3";
 import "dotenv/config";
 
 declare global {
@@ -66,10 +65,6 @@ const database = mariadb.createPool({
     database: process.env.DATABASE_NAME
 });
 
-const s3 = new S3Client({
-    region: process.env.S3_REGION
-});
-
 const dbQuery = (sql: string, params: string[], limit?: number) => {
     return new Promise((resolve) => {
         const parameters = params.map((param) => {
@@ -113,70 +108,6 @@ const dbQueryOne = (sql: string, params: string[]) => {
                 resolve(null);
             });
     });
-}
-
-const s3Query = (path: string) => {
-    return new Promise((resolve) => {
-        s3.send(new GetObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: path
-        }))
-            .then((data: any) => {
-                data.Body.transformToString()
-                    .then((body: any) => {
-                        resolve(body);
-                    });
-            })
-            .catch((err: any) => {
-                console.error(err);
-                resolve(null);
-            });
-    })
-};
-
-const s3QueryRaw = async (res: any, path: string) => {
-    console.log("[S3] "+path);
-    const headResponse: any = await s3.send(new HeadObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: path
-    }));
-    res.set({
-        "Content-Type": headResponse.ContentType,
-        "Content-Length": headResponse.ContentLength,
-        "ETag": headResponse.ETag,
-    });
-    const response: any = await s3.send(new GetObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: path
-    }));
-    const stream = response.Body;
-    stream.on("data", (chunk: any) => {
-        res.write(chunk);
-    });
-    stream.once("end", () => {
-        res.end();
-    });
-    stream.once("error", (err: any) => {
-        console.error(err);
-        res.status(500).send("Error retrieving image");
-    });
-}
-
-const s3Create = (path: string, body: any) => {
-    return new Promise<boolean>((resolve) => {
-        s3.send(new PutObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: path,
-            Body: body
-        }))
-            .then(() => {
-                resolve(true);
-            })
-            .catch((err: any) => {
-                console.error(err);
-                resolve(false);
-            });
-    })
 }
 
 // passport
@@ -377,16 +308,6 @@ app.get("/team", async (req: express.Request, res: express.Response) => {
     console.log("GET /team");
     const team = await dbQuery("SELECT * FROM team", []);
     res.json(team);
-});
-
-app.get("/team/:name", async (req: express.Request, res: express.Response) => {
-    try {
-        s3QueryRaw(res, `team/${req.params.name}.png`);
-    }
-    catch (error) {
-        console.error(error);
-        res.status(500).send('Error retrieving image');
-    }
 });
 
 app.get("/jobs", async (req: express.Request, res: express.Response) => {
@@ -594,7 +515,7 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                 }
                 // tangible blocks (opaque or transparent)
                 if(row.type===1||row.type===2) {
-                    row.texture = process.env.S3_ENDPOINT+"blocks/"+row.id+".png";
+                    row.texture = process.env.MINIO_URL+"blocks/"+row.id+".png";
                     row.isConcrete = true;
                     row.isOpaque = true;
                     if(row.type===2) row.isOpaque = false;
@@ -602,33 +523,13 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
                     return;
                 }
                 // models
-                else if(row.type===4)
-                    s3Query(`models/${row.id}.obj`)
-                        .then((data: any) => {
-                            if(data) {
-                                row.model = data;
-                                res.json(row);
-                                return;
-                            }
-                            else {
-                                res.status(404).json('notfound');
-                                return;
-                            }
-                        });
-                else
+                else if(row.type===4) {
+                    row.model = process.env.MINIO_URL+"models/"+row.id+".obj";
+                }
                 // items
-                    s3Query(`items/${row.id}.png`)
-                        .then((data: any) => {
-                            if(data) {
-                                row.texture = data;
-                                res.json(row);
-                            }
-                            else {
-                                res.status(404).json('notfound');
-                                return;
-                            }
-                        }
-                    );
+                else {
+                    row.texture = process.env.MINIO_URL+"items/"+row.id+".png";
+                }
             }
             else {
                 res.status(404).json('notfound');
@@ -641,16 +542,6 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
 app.get("/cosmetics", async (req: express.Request, res: express.Response) => {
     const cosmetics: any = await dbQuery("SELECT * FROM cosmetics", []);
     res.json(cosmetics);
-});
-
-app.get("/cosmetics/:id/:index", async (req: express.Request, res: express.Response) => {
-    try {
-        s3QueryRaw(res, `cosmetics/${req.params.id}/${req.params.index}.png`);
-    }
-    catch (error) {
-        console.error(error);
-        res.status(500).send('Error retrieving image');
-    }
 });
 
 app.get("/guild/:id", async (req: express.Request, res: express.Response) => {
