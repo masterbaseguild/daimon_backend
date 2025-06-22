@@ -12,6 +12,8 @@ import http from "http";
 import mariadb from "mariadb";
 import "dotenv/config";
 
+// data types
+
 declare global {
     namespace Express {
         interface User {
@@ -30,7 +32,7 @@ declare global {
     type tableName = "players" | "guilds" | "messages" | "players_to_guilds" | "discord_users" | "minecraft_players" | "local_users" | "minecraft_factions" | "characters" | "cosmetics" | "feed";
 }
 
-// utility functions
+// ids
 
 const generateId = (table: tableName) => {
     return new Promise<string>((resolve) => {
@@ -52,11 +54,7 @@ const checkId = (id: string, table: tableName) => {
     });
 };
 
-function capitalizeFirstLetter(string: String) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
-
-// vault access
+// database
 
 const database = mariadb.createPool({
     host: process.env.DATABASE_ENDPOINT,
@@ -214,7 +212,10 @@ passport.use("minecraft", new localStrategy({passReqToCallback: true}, async (re
     return done(null, {id: playerId});
 }));
 
-// middleware
+// middlewares:
+// - cors
+// - session and cookies
+// - passport
 
 const app = express();
 const corsOptions: cors.CorsOptions = {
@@ -234,62 +235,12 @@ app.use(bodyParser.urlencoded({
 }));
 app.use(passport.initialize());
 app.use(passport.session());
-const server = http.createServer(app);
 
 // routes
 
 app.get("/", (req: express.Request, res: express.Response) => {
     res.send("daimon api");
 });
-
-/* async function fetchYouTubeVideos () {
-    const channelId = process.env.YOUTUBE_CHANNEL_ID;
-    const apiKey = process.env.YOUTUBE_API_KEY;
-    const url = "https://www.googleapis.com/youtube/v3/search";
-    const params = {
-        part: "snippet",
-        channelId: channelId,
-        key: apiKey,
-        maxResults: 80,
-        order: "date",
-        pageToken: "CDIQAA"
-    };
-    const response = await axios.get(url, {params});
-    return response.data.items;
-}
-
-function convertToFeed (id: string, item: any) {
-    //convert timestamp "2024-07-25T17:00:12Z" to mariadb timestamp
-    const newTimestamp = item.snippet.publishedAt.replace("T", " ").replace("Z", "");
-    return {
-        id: id,
-        timestamp: newTimestamp,
-        display: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.default.url,
-        description: item.snippet.description,
-        youtube_video: "https://www.youtube.com/watch?v="+item.id.videoId
-    };
-}
-
-app.get("/fetchfeed", async (req: express.Request, res: express.Response) => {
-    const videos = await fetchYouTubeVideos();
-    //generate ids
-    const ids = [];
-    for(let i = 0; i < videos.length; i++) {
-        ids.push(await generateId("feed"));
-    }
-    //convert to feed
-    const feed = [];
-    for(let i = 0; i < videos.length; i++) {
-        feed.push(convertToFeed(ids[i], videos[i]));
-    }
-    //insert into database
-    for(let i = 0; i < feed.length; i++) {
-        const item = feed[i];
-        dbQuery("INSERT INTO feed (id, timestamp, display, thumbnail, description, youtube_video) VALUES (?, ?, ?, ?, ?, ?)", [item.id, item.timestamp, item.display, item.thumbnail, item.description, item.youtube_video]);
-    }
-    res.json(feed);
-}); */
 
 app.get("/feed/:count", async (req: express.Request, res: express.Response) => {
     console.log("GET /feed");
@@ -1240,7 +1191,7 @@ app.delete("/user/guild", async (req: express.Request, res: express.Response) =>
 
 app.delete("/user/auth/:service", (req: express.Request, res: express.Response) => {
     if(req.user) {
-        //if this is the last service the user has, refuse to unlink
+        // if this is the last service the user has, refuse to unlink
         Promise.all([
             dbQueryOne("SELECT * FROM local_users WHERE player = ?", [req.user.id]),
             dbQueryOne("SELECT * FROM discord_users WHERE player = ?", [req.user.id]),
@@ -1278,5 +1229,7 @@ app.delete("*", (req: express.Request, res: express.Response) => {
     res.status(404).json("notfound")
 });
 
+// server
 
+const server = http.createServer(app);
 server.listen(process.env.PORT,()=>console.log(`[BACKEND] Server Start Successful.`));
