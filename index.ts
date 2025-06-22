@@ -11,6 +11,7 @@ import crypto from "crypto";
 import http from "http";
 import mariadb from "mariadb";
 import "dotenv/config";
+import axios from "axios";
 
 // data types
 
@@ -661,6 +662,90 @@ app.get("/leaderboard/:name/:page", async (req: express.Request, res: express.Re
             res.status(404).json("notfound");
     
     }
+});
+
+app.get("/loltest/:name/:tag", async (req: express.Request, res: express.Response) => {
+
+    const skillBonuses = {
+        "constitution": 0,
+        "strength": 0,
+        "agility": 0,
+        "dexterity": 0,
+        "social": 0,
+        "intelligence": 0,
+        "aether": 0,
+    }
+
+    console.log("GET loltest");
+    const versionUrl = "https://ddragon.leagueoflegends.com/api/versions.json"
+    const versionResponse = await axios.get(versionUrl);
+    const version = versionResponse.data[0];
+
+    const championUrl = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`
+    const championResponse = await axios.get(championUrl);
+    const champion = championResponse.data.data;
+
+    const contentregion = "europe";
+    const username = req.params.name;
+    const usertag = req.params.tag;
+    const puuidUrl = `https://${contentregion}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${username}/${usertag}?api_key=${process.env.RIOT_API_KEY}`;
+    const puuidResponse = await axios.get(puuidUrl);
+    const puuid = puuidResponse.data.puuid;
+
+    const gameregion = "euw1"
+    const masteryUrl = `https://${gameregion}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}?api_key=${process.env.RIOT_API_KEY}`;
+    const masteryResponse = await axios.get(masteryUrl);
+    const mastery = masteryResponse.data;
+
+    const idToChampion: any = Object.values(champion).reduce((acc: any, champ: any) => {
+            acc[champ.key] = {
+                tags: champ.tags
+            };
+            return acc;
+        }, {});
+
+    const list = mastery.map((entry: any) => {
+        const champInfo = idToChampion[entry.championId.toString()];
+            if (champInfo) {
+                //return `${champInfo.name} (${champInfo.tags.join(", ")}): ${entry.championLevel}`;
+                return {tags: champInfo.tags, level: entry.championLevel}
+            } else {
+                //return `Unknown Champion (${entry.championId}): ${entry.championLevel}`;
+            }
+    })
+
+    list.forEach((champion: any) => {
+        const multiplier = 2/champion.tags.length
+        champion.tags.forEach((tag: any) => {
+            switch(tag)
+            {
+                case "Fighter":
+                    skillBonuses.strength+=multiplier*champion.level;
+                    break;
+                case "Assassin":
+                    skillBonuses.agility+=multiplier*champion.level;
+                    break;
+                case "Support":
+                    skillBonuses.intelligence+=multiplier*champion.level;
+                    break;
+                case "Tank":
+                    skillBonuses.constitution+=multiplier*champion.level;
+                    break;
+                case "Marksman":
+                    skillBonuses.dexterity+=multiplier*champion.level;
+                    break;
+                case "Mage":
+                    skillBonuses.aether+=multiplier*champion.level;
+                    break;
+            }
+        })
+    })
+
+    res.send(skillBonuses);
+});
+
+app.get("/favicon.ico", (req: express.Request, res: express.Response) => {
+    res.status(404).json("notfound")
 });
 
 app.get("*", (req: express.Request, res: express.Response) => {
