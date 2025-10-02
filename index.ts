@@ -59,6 +59,7 @@ const checkId = (id: string, table: tableName) => {
 
 const database = mariadb.createPool({
     host: process.env.DATABASE_ENDPOINT,
+    port: Number(process.env.DATABASE_PORT) || 3306,
     user: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME
@@ -70,7 +71,7 @@ const dbQuery = (sql: string, params: string[], limit?: number) => {
             return "'"+param+"'";
         })
         if(limit) parameters.push(limit.toString());
-        console.log("[DATABASE](N) "+sql.replace(/\?/g, (match) => {return parameters.shift() || "MISSING"}));
+        console.log("\x1b[33m%s\x1b[0m", "[DATABASE](N) "+sql.replace(/\?/g, (match) => {return parameters.shift() || "MISSING"}));
         database.query(sql, [...params, limit])
             .then((rows: any) => {
                 if(rows) {
@@ -91,7 +92,7 @@ const dbQueryOne = (sql: string, params: string[]) => {
     const parameters = params.map((param) => {
         return "'"+param+"'";
     })
-    console.log("[DATABASE](1) "+sql.replace(/\?/g, (match) => {return parameters.shift() || "MISSING"}));
+    console.log("\x1b[33m%s\x1b[0m", "[DATABASE](1) "+sql.replace(/\?/g, (match) => {return parameters.shift() || "MISSING"}));
     return new Promise((resolve) => {
         database.query(sql, params)
             .then((rows: any) => {
@@ -237,66 +238,75 @@ app.use(bodyParser.urlencoded({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// logging
+
+const logRequest = (req: express.Request, notFound?: boolean) => {
+    if(!notFound) {
+        console.log("\x1b[32m%s\x1b[0m", `[REQUEST] ${req.ip} ${req.method} ${req.url}`);
+    }
+    else {
+        console.log("\x1b[31m%s\x1b[0m", `[REQUEST] ${req.ip} ${req.method} ${req.url} (NOT FOUND)`);
+    }
+};
+
 // routes
 
 app.get("/", (req: express.Request, res: express.Response) => {
+    logRequest(req);
     res.send("daimon api");
 });
 
 app.get("/canon/*", async (req: express.Request, res: express.Response) => {
-    console.log("GET /canon");
+    logRequest(req);
 
     const fullPath = req.params[0];
     const repoName = "daimon_canon_masterbase";
     const repoOwner = "masterbaseguild";
     const branchName = "main";
     const filePath = `${fullPath}.md`;
-
-    try {
-        const response = await axios({
-            method: "get",
-            url: `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branchName}/${filePath}`,
-            headers: {
-                "Authorization": `token ${process.env.GITHUB_TOKEN}`,
-                "Accept": "application/vnd.github.v3.raw"
-            },
-            responseType: "arraybuffer"
-        });
-        res.setHeader("Content-Type", response.headers["content-type"] || "text/plain");
-        res.send(response.data);
-    }
-    catch (error) {
-        console.error("Error fetching canon:", error);
-        res.status(500).send("Error fetching canon");
-    }
+    const url = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branchName}/${filePath}`;
+    const response = await axios({
+        method: "get",
+        url: url,
+        headers: {
+            "Authorization": `token ${process.env.GITHUB_TOKEN}`,
+            "Accept": "application/vnd.github.v3.raw"
+        },
+        responseType: "arraybuffer"
+    });
+    console.log("\x1b[33m%s\x1b[0m", `[FETCH] ${url} ${response.status}`);
+    res.setHeader("Content-Type", response.headers["content-type"] || "text/plain");
+    res.send(response.data);
 });
 
 app.get("/feed/:count", async (req: express.Request, res: express.Response) => {
-    console.log("GET /feed");
+    logRequest(req);
     const count = Number(req.params.count);
     const feed = await dbQuery("SELECT * FROM feed ORDER BY timestamp DESC LIMIT ?", [], count);
     res.json(feed);
 })
 
 app.get("/static/:path", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     // mp4 videos stored locally in the /static folder
     const path = req.params.path;
     res.sendFile(path, {root: "./static"});
 });
 
 app.get("/team", async (req: express.Request, res: express.Response) => {
-    console.log("GET /team");
+    logRequest(req);
     const team = await dbQuery("SELECT * FROM team", []);
     res.json(team);
 });
 
 app.get("/jobs", async (req: express.Request, res: express.Response) => {
-    console.log("GET /jobs");
+    logRequest(req);
     const jobs = await dbQuery("SELECT * FROM jobs", []);
     res.json(jobs);
 });
 
 app.get("/user", (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         res.json(req.user.id);
     }
@@ -306,6 +316,7 @@ app.get("/user", (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/lfg", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         res.json(player.lfg);
@@ -316,6 +327,7 @@ app.get("/user/lfg", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/score", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const score: any = await dbQueryOne("SELECT score FROM players WHERE id = ?", [req.user.id]);
         res.json(score.score);
@@ -326,6 +338,7 @@ app.get("/user/score", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/display", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const display: any = await dbQueryOne("SELECT display FROM players WHERE id = ?", [req.user.id]);
         res.json(display.display);
@@ -336,6 +349,7 @@ app.get("/user/display", async (req: express.Request, res: express.Response) => 
 });
 
 app.get("/user/auth", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const local = await dbQueryOne("SELECT * FROM local_users WHERE player = ?", [req.user.id]);
         var discord = await dbQueryOne("SELECT * FROM discord_users WHERE player = ?", [req.user.id]);
@@ -355,6 +369,7 @@ app.get("/user/auth", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/messages", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const messages = await dbQuery("SELECT m.*, p.display AS player_display, g.display AS guild_display FROM messages m JOIN players p ON m.player = p.id JOIN guilds g ON m.guild = g.id WHERE m.player = ?", [req.user.id]);
         res.json(messages);
@@ -367,6 +382,7 @@ app.get("/user/messages", async (req: express.Request, res: express.Response) =>
 app.get("/user/auth/discord", passport.authenticate("discord", {successRedirect: process.env.FRONTEND_ENDPOINT+"/account", failureRedirect: process.env.FRONTEND_ENDPOINT}));
 
 app.get("/user/auth/logout", (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         req.logout(() => {
             res.status(200).json("success");
@@ -378,6 +394,7 @@ app.get("/user/auth/logout", (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/guild", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -394,6 +411,7 @@ app.get("/user/guild", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/guild/leader", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const leader: any = await dbQueryOne("SELECT id FROM guilds WHERE player = ?", [req.user.id]);
         if(leader) {
@@ -409,6 +427,7 @@ app.get("/user/guild/leader", async (req: express.Request, res: express.Response
 });
 
 app.get("/user/guild/messages", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id]);
         if(guild) {
@@ -422,6 +441,7 @@ app.get("/user/guild/messages", async (req: express.Request, res: express.Respon
 });
 
 app.get("/user/guilds", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const guilds = await dbQuery("SELECT g.id, g.display, g.score FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?", [req.user.id])
         if(guilds) {
@@ -437,6 +457,7 @@ app.get("/user/guilds", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/user/guilds/count", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const guilds: any = await dbQuery("SELECT g.id, g.display FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?", [req.user.id])
         if(guilds) {
@@ -452,6 +473,7 @@ app.get("/user/guilds/count", async (req: express.Request, res: express.Response
 });
 
 app.get("/user/character", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
         if(!character) {
@@ -468,6 +490,7 @@ app.get("/user/character", async (req: express.Request, res: express.Response) =
 })
 
 app.get("/user/character/boolean", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
         if(character) {
@@ -483,6 +506,7 @@ app.get("/user/character/boolean", async (req: express.Request, res: express.Res
 })
 
 app.get('/item/:id', (req: express.Request, res: express.Response) => {
+    logRequest(req);
     dbQueryOne('SELECT * FROM items WHERE id = ?', [req.params.id])
         .then((row: any) => {
             if(row) {
@@ -497,11 +521,13 @@ app.get('/item/:id', (req: express.Request, res: express.Response) => {
 });
 
 app.get("/cosmetics", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const cosmetics: any = await dbQuery("SELECT * FROM cosmetics", []);
     res.json(cosmetics);
 });
 
 app.get("/guild/:id", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [req.params.id]);
     if(guild) {
         res.json(guild);
@@ -512,6 +538,7 @@ app.get("/guild/:id", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/guild/:id/mainmembers", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const members = await dbQuery("SELECT p.display, p.id FROM players p JOIN guilds g ON p.guild = g.id WHERE g.id = ?", [req.params.id]);
     if(members) {
         res.json(members);
@@ -522,6 +549,7 @@ app.get("/guild/:id/mainmembers", async (req: express.Request, res: express.Resp
 });
 
 app.get("/guild/:id/members", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const members = await dbQuery("SELECT p.display, p.id FROM players p JOIN players_to_guilds pg ON p.id = pg.player WHERE pg.guild = ?", [req.params.id]);
     if(members) {
         res.json(members);
@@ -532,6 +560,7 @@ app.get("/guild/:id/members", async (req: express.Request, res: express.Response
 });
 
 app.get("/player/:id", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.params.id]);
     const local: any = await dbQueryOne("SELECT * FROM local_users WHERE player = ?", [req.params.id]);
     const discord = await dbQueryOne("SELECT * FROM discord_users WHERE player = ?", [req.params.id]);
@@ -556,6 +585,7 @@ app.get("/player/:id", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/player/:id/character", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.params.id]);
     if(character) {
         if(character.hair_style) character.hair_style = await dbQueryOne("SELECT * FROM cosmetics WHERE id = ?", [character.hair_style]);
@@ -568,6 +598,7 @@ app.get("/player/:id/character", async (req: express.Request, res: express.Respo
 });
 
 app.get("/player/:id/character/boolean", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.params.id]);
     if(character) {
         res.json(true);
@@ -578,6 +609,7 @@ app.get("/player/:id/character/boolean", async (req: express.Request, res: expre
 });
 
 app.get("/player/:id/guild", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.params.id]);
     if(player) {
         const guild = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [player.guild]);
@@ -594,6 +626,7 @@ app.get("/player/:id/guild", async (req: express.Request, res: express.Response)
 });
 
 app.get("/player/:id/guilds", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const guilds = await dbQuery("SELECT g.id, g.display FROM guilds g JOIN players_to_guilds pg ON g.id = pg.guild WHERE pg.player = ?", [req.params.id])
     if(guilds) {
         res.json(guilds);
@@ -604,6 +637,7 @@ app.get("/player/:id/guilds", async (req: express.Request, res: express.Response
 });
 
 app.get("/players", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const players = await dbQuery("SELECT * FROM players", [])
     if(players) {
         res.json(players);
@@ -614,6 +648,7 @@ app.get("/players", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/guilds", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const guilds = await dbQuery("SELECT * FROM guilds", [])
     if(guilds) {
         res.json(guilds);
@@ -624,6 +659,7 @@ app.get("/guilds", async (req: express.Request, res: express.Response) => {
 });
 
 app.get("/leaderboard/:name", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const pageSize = 10;
     const name = req.params.name;
     switch(name) {
@@ -653,6 +689,7 @@ app.get("/leaderboard/:name", async (req: express.Request, res: express.Response
 });
 
 app.get("/leaderboard/:name/:page", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     const pageSize: any = 10;
     const name = req.params.name;
     if(isNaN(parseInt(req.params.page))) {
@@ -693,7 +730,7 @@ app.get("/leaderboard/:name/:page", async (req: express.Request, res: express.Re
 });
 
 app.get("/loltest/:name/:tag", async (req: express.Request, res: express.Response) => {
-
+    logRequest(req);
     const skillBonuses = {
         "constitution": 0,
         "strength": 0,
@@ -704,25 +741,40 @@ app.get("/loltest/:name/:tag", async (req: express.Request, res: express.Respons
         "aether": 0,
     }
 
-    console.log("GET loltest");
     const versionUrl = "https://ddragon.leagueoflegends.com/api/versions.json"
-    const versionResponse = await axios.get(versionUrl);
+    const versionResponse = await axios({
+        method: 'get',
+        url: versionUrl
+    });
+    console.log("\x1b[33m%s\x1b[0m", `[FETCH] ${versionUrl} ${versionResponse.status}`);
     const version = versionResponse.data[0];
 
     const championUrl = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`
-    const championResponse = await axios.get(championUrl);
+    const championResponse = await axios({
+        method: 'get',
+        url: championUrl
+    });
+    console.log("\x1b[33m%s\x1b[0m", `[FETCH] ${championUrl} ${championResponse.status}`);
     const champion = championResponse.data.data;
 
     const contentregion = "europe";
     const username = req.params.name;
     const usertag = req.params.tag;
     const puuidUrl = `https://${contentregion}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${username}/${usertag}?api_key=${process.env.RIOT_API_KEY}`;
-    const puuidResponse = await axios.get(puuidUrl);
+    const puuidResponse = await axios({
+        method: 'get',
+        url: puuidUrl
+    });
+    console.log("\x1b[33m%s\x1b[0m", `[FETCH] ${puuidUrl} ${puuidResponse.status}`);
     const puuid = puuidResponse.data.puuid;
 
     const gameregion = "euw1"
     const masteryUrl = `https://${gameregion}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}?api_key=${process.env.RIOT_API_KEY}`;
-    const masteryResponse = await axios.get(masteryUrl);
+    const masteryResponse = await axios({
+        method: 'get',
+        url: masteryUrl
+    });
+    console.log("\x1b[33m%s\x1b[0m", `[FETCH] ${masteryUrl} ${masteryResponse.status}`);
     const mastery = masteryResponse.data;
 
     const idToChampion: any = Object.values(champion).reduce((acc: any, champ: any) => {
@@ -777,19 +829,22 @@ app.get("/favicon.ico", (req: express.Request, res: express.Response) => {
 });
 
 app.get("*", (req: express.Request, res: express.Response) => {
-    console.log("GET "+req.url+" not found");
+    logRequest(req, true);
     res.status(404).json("notfound")
 });
 
 app.post("/user/auth/local", passport.authenticate("local"), (req: express.Request, res: express.Response) => {
+    logRequest(req);
     res.status(200).json("success");
 });
 
 app.post("/user/auth/minecraft", passport.authenticate("minecraft"), (req: express.Request, res: express.Response) => {
+    logRequest(req);
     res.status(200).json("success");
 });
 
 app.post("/user/display", (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const display = req.body.display;
         dbQuery("UPDATE players SET display = ? WHERE id = ?", [display, req.user.id])
@@ -803,6 +858,7 @@ app.post("/user/display", (req: express.Request, res: express.Response) => {
 });
 
 app.post("/user/lfg", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const lfg: string = user.lfg ? "0" : "1";
@@ -822,6 +878,7 @@ app.post("/user/lfg", async (req: express.Request, res: express.Response) => {
 });
 
 app.post("/user/guild", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const oldGuild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -849,6 +906,7 @@ app.post("/user/guild", async (req: express.Request, res: express.Response) => {
 });
 
 app.post("/user/guild/lfp", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -869,6 +927,7 @@ app.post("/user/guild/lfp", async (req: express.Request, res: express.Response) 
 });
 
 app.post("/user/guild/display", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -887,6 +946,7 @@ app.post("/user/guild/display", async (req: express.Request, res: express.Respon
 });
 
 app.post("/user/guild/member", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -914,6 +974,7 @@ app.post("/user/guild/member", async (req: express.Request, res: express.Respons
 });
 
 app.post("/user/guild/member/kick", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -941,6 +1002,7 @@ app.post("/user/guild/member/kick", async (req: express.Request, res: express.Re
 })
 
 app.post("/user/guild/member/promote", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [user.guild]);
@@ -992,6 +1054,7 @@ app.post("/user/guild/member/promote", async (req: express.Request, res: express
 });
 
 app.post("/user/guilds", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const user: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [req.body.id]);
@@ -1026,6 +1089,7 @@ app.post("/user/guilds", async (req: express.Request, res: express.Response) => 
 });
 
 app.post("/message", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         // types:
         // 0: guild invites user
@@ -1064,6 +1128,7 @@ app.post("/message", async (req: express.Request, res: express.Response) => {
 });
 
 app.post("/message/delete", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const type = req.body.type;
         const player = req.body.player;
@@ -1094,6 +1159,7 @@ app.post("/message/delete", async (req: express.Request, res: express.Response) 
 });
 
 app.post("/guild", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id])
         if(guild) {
@@ -1136,6 +1202,7 @@ app.post("/guild", async (req: express.Request, res: express.Response) => {
 });
 
 app.post("/user/auth/local/password", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const oldPassword = req.body.password;
         const newPassword = req.body.newPassword;
@@ -1161,6 +1228,7 @@ app.post("/user/auth/local/password", async (req: express.Request, res: express.
 });
 
 app.post("/user/auth/local/username", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const newUsername = req.body.username;
         const password = req.body.password;
@@ -1185,6 +1253,7 @@ app.post("/user/auth/local/username", async (req: express.Request, res: express.
 });
 
 app.post("/user/character", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
         if(character) {
@@ -1205,11 +1274,12 @@ app.post("/user/character", async (req: express.Request, res: express.Response) 
 })
 
 app.post("*", (req: express.Request, res: express.Response) => {
-    console.log("POST "+req.url+" not found");
+    logRequest(req, true);
     res.status(404).json("notfound")
 });
 
 app.delete("/user", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const guild = await dbQueryOne("SELECT * FROM guilds WHERE player = ?", [req.user.id]);
         if(guild) {
@@ -1236,6 +1306,7 @@ app.delete("/user", async (req: express.Request, res: express.Response) => {
 });
 
 app.delete("/user/character", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const character: any = await dbQueryOne("SELECT * FROM characters WHERE player = ?", [req.user.id]);
         if(character) {
@@ -1252,6 +1323,7 @@ app.delete("/user/character", async (req: express.Request, res: express.Response
 });
 
 app.delete("/user/guilds/:id", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [req.params.id]);
         if(guild) {
@@ -1277,6 +1349,7 @@ app.delete("/user/guilds/:id", async (req: express.Request, res: express.Respons
 });
 
 app.delete("/user/guild", async (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         const player: any = await dbQueryOne("SELECT * FROM players WHERE id = ?", [req.user.id]);
         const guild: any = await dbQueryOne("SELECT * FROM guilds WHERE id = ?", [player.guild]);
@@ -1303,6 +1376,7 @@ app.delete("/user/guild", async (req: express.Request, res: express.Response) =>
 })
 
 app.delete("/user/auth/:service", (req: express.Request, res: express.Response) => {
+    logRequest(req);
     if(req.user) {
         // if this is the last service the user has, refuse to unlink
         Promise.all([
@@ -1338,11 +1412,11 @@ app.delete("/user/auth/:service", (req: express.Request, res: express.Response) 
 });
 
 app.delete("*", (req: express.Request, res: express.Response) => {
-    console.log("DELETE "+req.url+" not found");
+    logRequest(req, true);
     res.status(404).json("notfound")
 });
 
 // server
 
 const server = http.createServer(app);
-server.listen(process.env.PORT,()=>console.log(`[BACKEND] Server Start Successful.`));
+server.listen(process.env.PORT,()=>console.log(`[SYSTEM] Server Start Successful.`));
