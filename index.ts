@@ -243,6 +243,34 @@ app.get("/", (req: express.Request, res: express.Response) => {
     res.send("daimon api");
 });
 
+app.get("/canon/*", async (req: express.Request, res: express.Response) => {
+    console.log("GET /canon");
+
+    const fullPath = req.params[0];
+    const repoName = "daimon_canon_masterbase";
+    const repoOwner = "masterbaseguild";
+    const branchName = "main";
+    const filePath = `${fullPath}.md`;
+
+    try {
+        const response = await axios({
+            method: "get",
+            url: `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branchName}/${filePath}`,
+            headers: {
+                "Authorization": `token ${process.env.GITHUB_TOKEN}`,
+                "Accept": "application/vnd.github.v3.raw"
+            },
+            responseType: "arraybuffer"
+        });
+        res.setHeader("Content-Type", response.headers["content-type"] || "text/plain");
+        res.send(response.data);
+    }
+    catch (error) {
+        console.error("Error fetching canon:", error);
+        res.status(500).send("Error fetching canon");
+    }
+});
+
 app.get("/feed/:count", async (req: express.Request, res: express.Response) => {
     console.log("GET /feed");
     const count = Number(req.params.count);
